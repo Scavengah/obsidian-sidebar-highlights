@@ -1915,7 +1915,46 @@ export class HighlightsSidebarView extends ItemView {
                     const checkAndFocus = () => {
                         const newActiveView = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
                         if (newActiveView && newActiveView.file?.path === highlight.filePath) {
-                            this.performHighlightFocus(newActiveView, highlight);
+                            (async () => {
+                                try {
+                                    const initialMode = (newActiveView.getMode?.() ?? (newActiveView as any).currentMode?.type ?? (newActiveView as any).getState?.()?.mode ?? '').toString().toLowerCase();
+                                    const readingContainer: HTMLElement | null =
+                                        (newActiveView as any)?.contentEl?.querySelector?.('.markdown-reading-view') ||
+                                        (newActiveView as any)?.contentEl || (newActiveView as any)?.containerEl || null;
+                                    const prevScroll = readingContainer?.scrollTop ?? 0;
+
+                                    if (initialMode !== 'source') {
+                                        const leaf: any = (newActiveView as any).leaf || this.plugin.app.workspace.activeLeaf;
+                                        const filePath = newActiveView.file?.path;
+                                        if (leaf && filePath) {
+                                            await leaf.setViewState({ type: 'markdown', state: { file: filePath, mode: 'source' } }, { focus: true });
+                                            await new Promise(r => requestAnimationFrame(r));
+                                        }
+                                    }
+
+                                    await this.performHighlightFocus(newActiveView, highlight);
+
+                                    if (initialMode !== 'source') {
+                                        const leaf: any = (newActiveView as any).leaf || this.plugin.app.workspace.activeLeaf;
+                                        const filePath = newActiveView.file?.path;
+                                        if (leaf && filePath) {
+                                            await new Promise(r => setTimeout(r, 30));
+                                            await leaf.setViewState({ type: 'markdown', state: { file: filePath, mode: 'preview' } }, { focus: true });
+                                            await new Promise(r => setTimeout(r, 30));
+                                            try {
+                                                const v2: any = leaf?.view;
+                                                const cont2: HTMLElement | null =
+                                                    (v2 as any)?.contentEl?.querySelector?.('.markdown-reading-view') ||
+                                                    (v2 as any)?.contentEl || (v2 as any)?.containerEl || null;
+                                                if (cont2 && typeof prevScroll === 'number') cont2.scrollTop = prevScroll;
+                                            } catch {}
+                                        }
+                                    }
+                                } catch (e) {
+                                    console.warn('[Sidebar Highlights] ensure-source/restore-preview (newActiveView) failed', e);
+                                    this.performHighlightFocus(newActiveView, highlight);
+                                }
+                            })();
                             resolve(); // Resolve the promise when file is ready
                         } else {
                             // Retry if file isn't ready yet
@@ -1931,8 +1970,15 @@ export class HighlightsSidebarView extends ItemView {
         if (targetView) {
             (async () => {
                 try {
-                    const modeNow = (targetView.getMode?.() ?? (targetView as any).currentMode?.type ?? (targetView as any).getState?.()?.mode ?? '').toString().toLowerCase();
-                    if (modeNow !== 'source') {
+                    // Detect initial mode and reading container to restore scroll later
+                    const initialMode = (targetView.getMode?.() ?? (targetView as any).currentMode?.type ?? (targetView as any).getState?.()?.mode ?? '').toString().toLowerCase();
+                    const readingContainer: HTMLElement | null =
+                        (targetView as any)?.contentEl?.querySelector?.('.markdown-reading-view') ||
+                        (targetView as any)?.contentEl || (targetView as any)?.containerEl || null;
+                    const prevScroll = readingContainer?.scrollTop ?? 0;
+
+                    // Ensure Source mode so editor exists
+                    if (initialMode !== 'source') {
                         const leaf: any = (targetView as any).leaf || this.plugin.app.workspace.activeLeaf;
                         const filePath = targetView.file?.path;
                         if (leaf && filePath) {
@@ -1940,12 +1986,45 @@ export class HighlightsSidebarView extends ItemView {
                             await new Promise(r => requestAnimationFrame(r));
                         }
                     }
-                } catch {}
-                requestAnimationFrame(() => {
-                    this.performHighlightFocus(targetView!, highlight);
-                });
+
+                    // Focus in Source using existing logic, then switch back if needed
+                    await new Promise<void>(resolve => {
+                        requestAnimationFrame(async () => {
+                            try {
+                                await this.performHighlightFocus(targetView!, highlight);
+                            } finally {
+                                resolve();
+                            }
+                        });
+                    });
+
+                    if (initialMode !== 'source') {
+                        const leaf: any = (targetView as any).leaf || this.plugin.app.workspace.activeLeaf;
+                        const filePath = targetView.file?.path;
+                        if (leaf && filePath) {
+                            // Hop back to preview/reading
+                            await new Promise(r => setTimeout(r, 30));
+                            await leaf.setViewState({ type: 'markdown', state: { file: filePath, mode: 'preview' } }, { focus: true });
+                            await new Promise(r => setTimeout(r, 30));
+                            try {
+                                const v2: any = leaf?.view;
+                                const cont2: HTMLElement | null =
+                                    (v2 as any)?.contentEl?.querySelector?.('.markdown-reading-view') ||
+                                    (v2 as any)?.contentEl || (v2 as any)?.containerEl || null;
+                                if (cont2 && typeof prevScroll === 'number') cont2.scrollTop = prevScroll;
+                            } catch {}
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[Sidebar Highlights] ensure-source/restore-preview (targetView) failed', e);
+                    // Best-effort fallback
+                    requestAnimationFrame(() => {
+                        this.performHighlightFocus(targetView!, highlight);
+                    });
+                }
             })();
         }
+
     }
 
     private isHtmlHighlight(highlight: Highlight): boolean {
