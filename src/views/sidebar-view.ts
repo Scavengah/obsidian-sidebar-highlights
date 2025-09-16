@@ -1432,7 +1432,75 @@ export class HighlightsSidebarView extends ItemView {
                 });
             },
             onHighlightClick: (highlight, event) => {
-                this.focusHighlightInEditor(highlight, event);
+                
+    // Reading-mode robust hop: switch to Source, focus by offsets, then back to Preview
+    (async () => {
+        try {
+            const ws: any = this.app?.workspace;
+            const leaf: any = ws?.activeLeaf;
+            const view: any = leaf?.view;
+            const file = view?.file;
+            const rawMode = (view?.getMode?.() ?? view?.currentMode?.type ?? view?.getState?.()?.mode ?? '').toString().toLowerCase();
+
+            const isReading = rawMode === 'preview' || rawMode === 'reading';
+            if (file && isReading) {
+                // save current preview scroll
+                const container: HTMLElement | null =
+                    (view as any)?.contentEl?.querySelector?.('.markdown-reading-view') ||
+                    (view as any)?.contentEl || (view as any)?.containerEl || null;
+                const prevScroll = container?.scrollTop ?? 0;
+
+                // 1) switch to source
+                await leaf.setViewState({ type: 'markdown', state: { file: file.path, mode: 'source' } }, { focus: true });
+
+                // 2) wait for editor to be ready
+                const deadline = Date.now() + 1500;
+                while (Date.now() < deadline) {
+                    const v: any = leaf?.view;
+                    const modeNow = (v?.getMode?.() ?? v?.currentMode?.type ?? v?.getState?.()?.mode ?? '').toString().toLowerCase();
+                    const editor = v?.editor;
+                    if (modeNow === 'source' && editor) break;
+                    await new Promise(r => setTimeout(r, 16));
+                }
+
+                // 3) focus using existing logic
+                try {
+                    await this.focusHighlightInEditor(highlight, event);
+                } catch (e) {
+                    console.warn('[Sidebar Highlights] focusHighlightInEditor during hop failed', e);
+                }
+
+                // small settle
+                await new Promise(r => setTimeout(r, 30));
+
+                // 4) back to preview
+                await leaf.setViewState({ type: 'markdown', state: { file: file.path, mode: 'preview' } }, { focus: true });
+
+                // 5) wait for preview render and restore scroll
+                await new Promise(r => setTimeout(r, 50));
+                try {
+                    const v2: any = leaf?.view;
+                    const cont2: HTMLElement | null =
+                        (v2 as any)?.contentEl?.querySelector?.('.markdown-reading-view') ||
+                        (v2 as any)?.contentEl || (v2 as any)?.containerEl || null;
+                    if (cont2 && typeof prevScroll === 'number') cont2.scrollTop = prevScroll;
+                } catch {}
+
+                console.log('[Sidebar Highlights] reading hop completed');
+                return; // handled
+            }
+        } catch (e) {
+            console.warn('[Sidebar Highlights] reading hop wrapper error', e);
+        }
+
+        // default path (source/live preview)
+        try {
+            await this.focusHighlightInEditor(highlight, event);
+        } catch (e) {
+            console.warn('[Sidebar Highlights] focusHighlightInEditor fallback failed', e);
+        }
+    })();
+
             },
             onAddComment: async (highlight) => {
                 
@@ -1859,11 +1927,24 @@ export class HighlightsSidebarView extends ItemView {
             }
         }
 
+        
         if (targetView) {
-            // Use requestAnimationFrame for smoother focus
-            requestAnimationFrame(() => {
-                this.performHighlightFocus(targetView!, highlight);
-            });
+            (async () => {
+                try {
+                    const modeNow = (targetView.getMode?.() ?? (targetView as any).currentMode?.type ?? (targetView as any).getState?.()?.mode ?? '').toString().toLowerCase();
+                    if (modeNow !== 'source') {
+                        const leaf: any = (targetView as any).leaf || this.plugin.app.workspace.activeLeaf;
+                        const filePath = targetView.file?.path;
+                        if (leaf && filePath) {
+                            await leaf.setViewState({ type: 'markdown', state: { file: filePath, mode: 'source' } }, { focus: true });
+                            await new Promise(r => requestAnimationFrame(r));
+                        }
+                    }
+                } catch {}
+                requestAnimationFrame(() => {
+                    this.performHighlightFocus(targetView!, highlight);
+                });
+            })();
         }
     }
 
