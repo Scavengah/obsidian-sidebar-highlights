@@ -1204,8 +1204,16 @@ export default class HighlightCommentsPlugin extends Plugin {
                 const bg = styleAttr.match(/background(?:-color)?:\s*([^;]+)/i)?.[1]?.trim();
                 const markColor = bg || '#ffff00';
                 // Create a modified match array with the text content
+                if (/<mark\b/i.test(match[1])) {
+                // Nested <mark> inside: skip base emission; nested parser will add proper cards
+                continue;
+                }
                 const modifiedMatch: RegExpExecArray = Object.assign([], match);
-                modifiedMatch[1] = match[1]; // Use the text content
+                // Strip any inner tags to plain text so the parent card shows cleanly
+                const tpl = document.createElement('template');
+                tpl.innerHTML = match[1];
+                const plain = (tpl.content.textContent || '').replace(/\s+/g, ' ').trim();
+                modifiedMatch[1] = plain;
                 allMatches.push({match: modifiedMatch, type: 'html', color: markColor});
             }
         }

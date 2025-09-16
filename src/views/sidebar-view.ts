@@ -1634,6 +1634,7 @@ export class HighlightsSidebarView extends ItemView {
         }
 
         if (!insertPos) {
+            console.warn('[Sidebar Highlights] could not find html highlight', { id: highlight.id, text: highlight.text, type: highlight.type });
             new Notice('Could not find the highlight in the editor. It might have been modified.');
             return;
         }
@@ -1874,6 +1875,10 @@ export class HighlightsSidebarView extends ItemView {
     private getHtmlHighlightPatterns(highlight: Highlight): Array<{pattern: string, tagLength: number}> {
         const escapedText = this.escapeRegex(highlight.text);
         const patterns: Array<{pattern: string, tagLength: number}> = [];
+        // Allow nested tags between words (handles <mark> ... <mark>child</mark> ... </mark>)
+        const withTagsBetweenWords = escapedText.replace(/\s+/g, '(?:\\s|<[^>]+>)+');
+        // Try permissive parent <mark> pattern first
+        patterns.push({ pattern: `<mark[^>]*>${withTagsBetweenWords}<\\/mark>`, tagLength: 0 });
         
         // Pattern for <span style="background:color">text</span>
         patterns.push({
