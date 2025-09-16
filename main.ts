@@ -1031,6 +1031,78 @@ export default class HighlightCommentsPlugin extends Plugin {
         
         return hex;
     }
+    // --- Nested <mark> parsing helpers (in-class) ---------------------------------
+    /**
+     * Parse properly nested <mark>...</mark> tags using a stack and return top-level nodes.
+     * Each node contains positions and plain text content; children are nested <mark>s.
+     */
+    private parseNestedMarks(content: string) {
+        const nodes: any[] = [];
+        const stack: any[] = [];
+        const tagRe = /<\/?mark\b[^>]*>/gi;
+        let m: RegExpExecArray | null;
+
+        const getColor = (openTag: string) => {
+            const style = openTag.match(/style\s*=\s*["']([^"']+)["']/i)?.[1] ?? "";
+            const bg = style.match(/background(?:-color)?:\s*([^;]+)/i)?.[1]?.trim();
+            return bg || null;
+        };
+
+        while ((m = tagRe.exec(content)) !== null) {
+            const token = m[0];
+            const isClose = /^<\/mark/i.test(token);
+            if (!isClose) {
+                stack.push({ start: m.index, open: token, openEnd: m.index + token.length, children: [] });
+            } else if (stack.length) {
+                const node = stack.pop()!;
+                const end = m.index + token.length;
+                const innerHtml = content.slice(node.openEnd, m.index);
+
+                // Convert inner HTML to plain text (strip tags safely)
+                const tpl = document.createElement('template');
+                tpl.innerHTML = innerHtml;
+                const textContent = (tpl.content.textContent || '').replace(/\s+/g, ' ').trim();
+
+                const color = getColor(node.open);
+                const result = {
+                    index: node.start,
+                    length: end - node.start,
+                    openEnd: node.openEnd,
+                    innerHtml,
+                    text: textContent,
+                    color,
+                    children: node.children
+                };
+                if (stack.length) {
+                    stack[stack.length - 1].children.push(result);
+                } else {
+                    nodes.push(result);
+                }
+            }
+        }
+        return nodes;
+    }
+
+    /**
+     * Push a synthetic RegExp-like match for HTML highlights into allMatches.
+     * Ensures downstream logic works unchanged.
+     */
+    private pushHtmlMatch(
+        allMatches: Array<{match: RegExpExecArray, type: 'html', color?: string}>,
+        content: string,
+        index: number,
+        length: number,
+        text: string,
+        color?: string
+    ) {
+        const synthetic: any = [] as any;
+        synthetic.index = index;
+        synthetic[0] = content.slice(index, index + length); // full match text region
+        synthetic[1] = text;                                  // display text (plain, no tags)
+        allMatches.push({ match: synthetic as RegExpExecArray, type: 'html', color });
+    }
+    // ------------------------------------------------------------------------------
+
 
     detectAndStoreMarkdownHighlights(content: string, file: TFile, shouldRefresh: boolean = true) {
         const markdownHighlightRegex = /==([^=\n](?:[^=\n]|=[^=\n])*?[^=\n])==/g;
@@ -1153,13 +1225,19 @@ export default class HighlightCommentsPlugin extends Plugin {
             }
         }
         
-        // Find HTML mark tag matches
-        while ((match = markTagRegex.exec(content)) !== null) {
-            if (!this.isInsideCodeBlock(match.index, match.index + match[0].length, codeBlockRanges)) {
-                // Create a modified match array with the text content
-                const modifiedMatch: RegExpExecArray = Object.assign([], match);
-                modifiedMatch[1] = match[1]; // Use the text content
-                allMatches.push({match: modifiedMatch, type: 'html', color: '#ffff00'}); // Default yellow for <mark>
+        // Parse nested <mark> tags and emit parent + first child
+        const _markNodes = this.parseNestedMarks(content);
+        for (const node of _markNodes) {
+            if (!this.isInsideCodeBlock(node.index, node.index + node.length, codeBlockRanges)) {
+                // Parent card
+                this.pushHtmlMatch(allMatches, content, node.index, node.length, node.text, node.color ?? '#ffff00');
+                // First child (if any)
+                if (node.children && node.children.length > 0) {
+                    const child = node.children[0];
+                    if (!this.isInsideCodeBlock(child.index, child.index + child.length, codeBlockRanges)) {
+                        this.pushHtmlMatch(allMatches, content, child.index, child.length, child.text, child.color ?? '#ffff00');
+                    }
+                }
             }
         }
         
