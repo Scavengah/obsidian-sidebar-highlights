@@ -1031,23 +1031,25 @@ export default class HighlightCommentsPlugin extends Plugin {
         
         return hex;
     }
-    // --- Nested <mark> parsing helpers (in-class) ---------------------------------
-    /**
-     * Parse properly nested <mark>...</mark> tags using a stack and return top-level nodes.
-     * Each node contains positions and plain text content; children are nested <mark>s.
-     */
-    private parseNestedMarks(content: string) {
+    // --- Anchor comment helper ---
+    private stripHtmlToText(html: string): string {
+        const tpl = document.createElement('template');
+        tpl.innerHTML = html || '';
+        return (tpl.content.textContent || '').replace(/\s+/g, ' ').trim();
+    }
+    // --- Nested <mark> parser (non-invasive) ---
+    private parseNestedMarks(content: string): Array<{
+        start: number; end: number; text: string; color?: string; children: Array<{start:number; end:number; text:string; color?: string}>
+    }> {
         const nodes: any[] = [];
         const stack: any[] = [];
         const tagRe = /<\/?mark\b[^>]*>/gi;
         let m: RegExpExecArray | null;
-
         const getColor = (openTag: string) => {
             const style = openTag.match(/style\s*=\s*["']([^"']+)["']/i)?.[1] ?? "";
             const bg = style.match(/background(?:-color)?:\s*([^;]+)/i)?.[1]?.trim();
-            return bg || null;
+            return bg || undefined;
         };
-
         while ((m = tagRe.exec(content)) !== null) {
             const token = m[0];
             const isClose = /^<\/mark/i.test(token);
@@ -1057,51 +1059,17 @@ export default class HighlightCommentsPlugin extends Plugin {
                 const node = stack.pop()!;
                 const end = m.index + token.length;
                 const innerHtml = content.slice(node.openEnd, m.index);
-
-                // Convert inner HTML to plain text (strip tags safely)
                 const tpl = document.createElement('template');
                 tpl.innerHTML = innerHtml;
                 const textContent = (tpl.content.textContent || '').replace(/\s+/g, ' ').trim();
-
                 const color = getColor(node.open);
-                const result = {
-                    index: node.start,
-                    length: end - node.start,
-                    openEnd: node.openEnd,
-                    innerHtml,
-                    text: textContent,
-                    color,
-                    children: node.children
-                };
-                if (stack.length) {
-                    stack[stack.length - 1].children.push(result);
-                } else {
-                    nodes.push(result);
-                }
+                const result = { start: node.start, end, text: textContent, color, children: node.children };
+                if (stack.length) stack[stack.length - 1].children.push(result); else nodes.push(result);
             }
         }
         return nodes;
     }
 
-    /**
-     * Push a synthetic RegExp-like match for HTML highlights into allMatches.
-     * Ensures downstream logic works unchanged.
-     */
-    private pushHtmlMatch(
-        allMatches: Array<{match: RegExpExecArray, type: 'html', color?: string}>,
-        content: string,
-        index: number,
-        length: number,
-        text: string,
-        color?: string
-    ) {
-        const synthetic: any = [] as any;
-        synthetic.index = index;
-        synthetic[0] = content.slice(index, index + length); // full match text region
-        synthetic[1] = text;                                  // display text (plain, no tags)
-        allMatches.push({ match: synthetic as RegExpExecArray, type: 'html', color });
-    }
-    // ------------------------------------------------------------------------------
 
 
     detectAndStoreMarkdownHighlights(content: string, file: TFile, shouldRefresh: boolean = true) {
@@ -1114,6 +1082,7 @@ export default class HighlightCommentsPlugin extends Plugin {
         const markTagRegex = /<mark[^>]*>(.*?)<\/mark>/gi;
         const spanClassRegex = /<span\s+class=["']([^"']+)["'][^>]*>(.*?)<\/span>/gi;
         const newHighlights: Highlight[] = [];
+        const consumedAnchorStarts = new Set<number>();
         const existingHighlightsForFile = this.highlights.get(file.path) || [];
         const usedExistingHighlights = new Set<string>(); // Track which highlights we've already matched
         
@@ -1225,19 +1194,19 @@ export default class HighlightCommentsPlugin extends Plugin {
             }
         }
         
-        // Parse nested <mark> tags and emit parent + first child
-        const _markNodes = this.parseNestedMarks(content);
-        for (const node of _markNodes) {
-            if (!this.isInsideCodeBlock(node.index, node.index + node.length, codeBlockRanges)) {
-                // Parent card
-                this.pushHtmlMatch(allMatches, content, node.index, node.length, node.text, node.color ?? '#ffff00');
-                // First child (if any)
-                if (node.children && node.children.length > 0) {
-                    const child = node.children[0];
-                    if (!this.isInsideCodeBlock(child.index, child.index + child.length, codeBlockRanges)) {
-                        this.pushHtmlMatch(allMatches, content, child.index, child.length, child.text, child.color ?? '#ffff00');
-                    }
-                }
+        // Find HTML mark tag matches
+        while ((match = markTagRegex.exec(content)) !== null) {
+            if (!this.isInsideCodeBlock(match.index, match.index + match[0].length, codeBlockRanges)) {
+                // Extract inline style background color if present
+                const openTagEnd = match[0].indexOf('>') + 1;
+                const openTag = match[0].slice(0, openTagEnd);
+                const styleAttr = openTag.match(/style\s*=\s*["']([^"']+)["']/i)?.[1] ?? "";
+                const bg = styleAttr.match(/background(?:-color)?:\s*([^;]+)/i)?.[1]?.trim();
+                const markColor = bg || '#ffff00';
+                // Create a modified match array with the text content
+                const modifiedMatch: RegExpExecArray = Object.assign([], match);
+                modifiedMatch[1] = match[1]; // Use the text content
+                allMatches.push({match: modifiedMatch, type: 'html', color: markColor});
             }
         }
         
@@ -1257,6 +1226,39 @@ export default class HighlightCommentsPlugin extends Plugin {
         
         // Sort matches by position in content
         allMatches.sort((a, b) => a.match.index - b.match.index);
+        // --- Augment matches with nested <mark> parent + first child (dedup by range) ---
+        (function addNestedHtmlMatches() {
+            const key = (s:number,e:number)=>`${s}:${e}`;
+            const existing = new Set<string>();
+            for (const it of allMatches) {
+                if (!it || !it.match) continue;
+                const s = it.match.index, e = it.match.index + it.match[0].length;
+                existing.add(key(s,e));
+            }
+            const nested = this.parseNestedMarks(content);
+            for (const node of nested) {
+                const s = node.start, e = node.end;
+                if (!this.isInsideCodeBlock(s, e, codeBlockRanges)) {
+                    if (!existing.has(key(s,e))) {
+                        const syn: any = [] as any;
+                        syn.index = s; syn[0] = content.slice(s,e); syn[1] = node.text;
+                        allMatches.push({ match: syn as RegExpExecArray, type: 'html', color: node.color ?? '#ffff00'});
+                        existing.add(key(s,e));
+                    }
+                    if (node.children && node.children.length) {
+                        const c = node.children[0];
+                        const cs = c.start, ce = c.end;
+                        if (!this.isInsideCodeBlock(cs, ce, codeBlockRanges) && !existing.has(key(cs,ce))) {
+                            const synC: any = [] as any;
+                            synC.index = cs; synC[0] = content.slice(cs,ce); synC[1] = c.text;
+                            allMatches.push({ match: synC as RegExpExecArray, type: 'html', color: c.color ?? '#ffff00'});
+                            existing.add(key(cs,ce));
+                        }
+                    }
+                }
+            }
+        }).call(this);
+
 
         allMatches.forEach(({match, type, color}) => {
             const [, highlightText] = match;
@@ -1342,7 +1344,27 @@ export default class HighlightCommentsPlugin extends Plugin {
                 footnoteCount = 1;
             }
             
-            if (existingHighlight) {
+            
+            // Attach adjacent <span class="comment-anchor"><span class="comment-text">…</span></span> (0–1 space tolerance)
+            if (type === 'highlight' || type === 'html') {
+                const endOfThisHighlight = match.index + match[0].length;
+                const after = content.slice(endOfThisHighlight);
+                const mAnchor = after.match(/^(?:\s{0,1})<span\s+class=["']comment-anchor["'][^>]*>\s*<span\s+class=["']comment-text["'][^>]*>([\s\S]*?)<\/span>\s*<\/span>/i);
+                if (mAnchor) {
+                    const leadingSpace = after.startsWith(' ') ? 1 : 0;
+                    const anchorStart = endOfThisHighlight + leadingSpace;
+                    const tpl = document.createElement('template');
+                    tpl.innerHTML = mAnchor[1] || '';
+                    const anchorText = (tpl.content.textContent || '').replace(/\s+/g, ' ').trim();
+                    if (anchorText) {
+                        footnoteContents = Array.isArray(footnoteContents) ? footnoteContents : [];
+                        footnoteContents.push(anchorText);
+                        footnoteCount = (footnoteCount || 0) + 1;
+                        consumedAnchorStarts.add(anchorStart);
+                    }
+                }
+            }
+if (existingHighlight) {
                 newHighlights.push({
                     ...existingHighlight,
                     line: lineNumber,
@@ -1382,6 +1404,37 @@ export default class HighlightCommentsPlugin extends Plugin {
                 });
             }
         });
+
+
+        // Standalone comment-anchor cards (anchors not attached above)
+        {
+            const anchorCommentRegex = /<span\s+class=["']comment-anchor["'][^>]*>\s*<span\s+class=["']comment-text["'][^>]*>([\s\S]*?)<\/span>\s*<\/span>/gi;
+            let am: RegExpExecArray | null;
+            while ((am = anchorCommentRegex.exec(content)) !== null) {
+                if (consumedAnchorStarts.has(am.index)) continue;
+                if (this.isInsideCodeBlock(am.index, am.index + am[0].length, codeBlockRanges)) continue;
+                const tpl = document.createElement('template');
+                tpl.innerHTML = am[1] || '';
+                const textOnly = (tpl.content.textContent || '').replace(/\s+/g, ' ').trim();
+                if (!textOnly) continue;
+                const lineNumber = content.substring(0, am.index).split('\n').length - 1;
+                newHighlights.push({
+                    id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
+                    text: textOnly,
+                    tags: [],
+                    line: lineNumber,
+                    startOffset: am.index,
+                    endOffset: am.index + am[0].length,
+                    filePath: file.path,
+                    footnoteCount: 1,
+                    footnoteContents: [textOnly],
+                    isNativeComment: true,
+                    color: undefined,
+                    createdAt: Date.now(),
+                    type: 'comment' as any
+                });
+            }
+        }
 
         // Check for actual changes before updating and refreshing
         const oldHighlightsJSON = JSON.stringify(existingHighlightsForFile.map(h => ({id: h.id, start: h.startOffset, end: h.endOffset, text: h.text, footnotes: h.footnoteCount, contents: h.footnoteContents?.filter(c => c.trim() !== ''), color: h.color, isNativeComment: h.isNativeComment})));
