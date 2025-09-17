@@ -71,6 +71,11 @@ export class HighlightRenderer {
             // Native comments get special styling
             item.classList.add('highlight-native-comment');
         } else {
+            // Sidebar card origin tag for real HTML <mark> highlights
+            if (highlight.type === 'html') {
+                item.classList.add('highlight-origin-html');
+            }
+
             // Regular highlights get color styling
             const highlightColor = highlight.color || this.plugin.settings.highlightColor;
             const colorClass = this.getColorClassName(highlightColor);

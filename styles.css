@@ -1589,3 +1589,106 @@ body.theme-highlight-green .cm-highlight {
 .highlights-list-area::-webkit-scrollbar-thumb:hover {
   background: var(--background-modifier-border-hover);
 }
+
+/* Subtle Sidebar Brightening for real HTML-origin highlight cards
+   - Scope: sidebar only
+   - Strength: OKLCH +0.08 (subtle), fallback mix 28%
+   - Ensures selected/active state stays brightened (uses !important on ring)
+   - Drop this at the END of your styles.css or load as an extra stylesheet
+*/
+
+:root {
+  --sidebar-oklch-delta: 0.1;   /* ~subtle lift; try 0.06–0.10 */
+  --sidebar-mark-brighten: 40%;  /* fallback mix strength */
+  --sidebar-brighten-target: var(--background-primary, white); /* theme-aware */
+}
+
+/* ===== OKLCH path (preferred) ===== */
+@supports (color(from red oklch l c h)) {
+  /* Default + custom colors */
+  .workspace-leaf-content[data-type="highlights-sidebar"] 
+  .highlight-item-card.highlight-origin-html.highlight-color-default {
+    border-left-color: color(from rgb(var(--text-highlight-bg-rgb)) oklch calc(l + var(--sidebar-oklch-delta)) c h);
+  }
+  .workspace-leaf-content[data-type="highlights-sidebar"] 
+  .highlight-item-card.highlight-origin-html.highlight-color-custom {
+    border-left-color: color(from var(--highlight-color, rgb(var(--text-highlight-bg-rgb))) oklch calc(l + var(--sidebar-oklch-delta)) c h);
+  }
+  /* Selection/active ring — keep brightened */
+  .workspace-leaf-content[data-type="highlights-sidebar"] 
+  .highlight-item-card.highlight-origin-html.highlight-color-default.highlight-selected,
+  .workspace-leaf-content[data-type="highlights-sidebar"] 
+  .highlight-item-card.highlight-origin-html.highlight-color-default:active {
+    box-shadow: 0 0 0 1.5px color(from rgb(var(--text-highlight-bg-rgb)) oklch calc(l + var(--sidebar-oklch-delta)) c h), var(--shadow-s) !important;
+  }
+  .workspace-leaf-content[data-type="highlights-sidebar"] 
+  .highlight-item-card.highlight-origin-html.highlight-color-custom.highlight-selected,
+  .workspace-leaf-content[data-type="highlights-sidebar"] 
+  .highlight-item-card.highlight-origin-html.highlight-color-custom:active {
+    box-shadow: 0 0 0 1.5px color(from var(--highlight-color, rgb(var(--text-highlight-bg-rgb))) oklch calc(l + var(--sidebar-oklch-delta)) c h), var(--shadow-s) !important;
+  }
+
+  /* Preset palette borders (subtle brighten) */
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-yellow { border-left-color: color(from #ffd700 oklch calc(l + var(--sidebar-oklch-delta)) c h); }
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-red    { border-left-color: color(from #ff6b6b oklch calc(l + var(--sidebar-oklch-delta)) c h); }
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-teal   { border-left-color: color(from #4ecdc4 oklch calc(l + var(--sidebar-oklch-delta)) c h); }
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-blue   { border-left-color: color(from #45b7d1 oklch calc(l + var(--sidebar-oklch-delta)) c h); }
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-green  { border-left-color: color(from #96ceb4 oklch calc(l + var(--sidebar-oklch-delta)) c h); }
+
+  /* Preset palette selection/active rings (match the brighten, force override) */
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-yellow.highlight-selected,
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-yellow:active { box-shadow: 0 0 0 1.5px color(from #ffd700 oklch calc(l + var(--sidebar-oklch-delta)) c h), var(--shadow-s) !important; }
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-red.highlight-selected,
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-red:active    { box-shadow: 0 0 0 1.5px color(from #ff6b6b oklch calc(l + var(--sidebar-oklch-delta)) c h), var(--shadow-s) !important; }
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-teal.highlight-selected,
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-teal:active   { box-shadow: 0 0 0 1.5px color(from #4ecdc4 oklch calc(l + var(--sidebar-oklch-delta)) c h), var(--shadow-s) !important; }
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-blue.highlight-selected,
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-blue:active   { box-shadow: 0 0 0 1.5px color(from #45b7d1 oklch calc(l + var(--sidebar-oklch-delta)) c h), var(--shadow-s) !important; }
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-green.highlight-selected,
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-green:active  { box-shadow: 0 0 0 1.5px color(from #96ceb4 oklch calc(l + var(--sidebar-oklch-delta)) c h), var(--shadow-s) !important; }
+}
+
+/* ===== Fallback path (no OKLCH support) ===== */
+@supports not (color(from red oklch l c h)) {
+  /* Default + custom colors */
+  .workspace-leaf-content[data-type="highlights-sidebar"] 
+  .highlight-item-card.highlight-origin-html.highlight-color-default {
+    border-left-color: color-mix(in srgb, rgb(var(--text-highlight-bg-rgb)) calc(100% - var(--sidebar-mark-brighten)), var(--sidebar-brighten-target) var(--sidebar-mark-brighten));
+  }
+  .workspace-leaf-content[data-type="highlights-sidebar"] 
+  .highlight-item-card.highlight-origin-html.highlight-color-custom {
+    border-left-color: color-mix(in srgb, var(--highlight-color, rgb(var(--text-highlight-bg-rgb))) calc(100% - var(--sidebar-mark-brighten)), var(--sidebar-brighten-target) var(--sidebar-mark-brighten));
+  }
+  /* Selection/active ring — keep brightened */
+  .workspace-leaf-content[data-type="highlights-sidebar"] 
+  .highlight-item-card.highlight-origin-html.highlight-color-default.highlight-selected,
+  .workspace-leaf-content[data-type="highlights-sidebar"] 
+  .highlight-item-card.highlight-origin-html.highlight-color-default:active {
+    box-shadow: 0 0 0 1.5px color-mix(in srgb, rgb(var(--text-highlight-bg-rgb)) calc(100% - var(--sidebar-mark-brighten)), var(--sidebar-brighten-target) var(--sidebar-mark-brighten)), var(--shadow-s) !important;
+  }
+  .workspace-leaf-content[data-type="highlights-sidebar"] 
+  .highlight-item-card.highlight-origin-html.highlight-color-custom.highlight-selected,
+  .workspace-leaf-content[data-type="highlights-sidebar"] 
+  .highlight-item-card.highlight-origin-html.highlight-color-custom:active {
+    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--highlight-color, rgb(var(--text-highlight-bg-rgb))) calc(100% - var(--sidebar-mark-brighten)), var(--sidebar-brighten-target) var(--sidebar-mark-brighten)), var(--shadow-s) !important;
+  }
+
+  /* Preset palette borders */
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-yellow { border-left-color: color-mix(in srgb, #ffd700 calc(100% - var(--sidebar-mark-brighten)), var(--sidebar-brighten-target) var(--sidebar-mark-brighten)); }
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-red    { border-left-color: color-mix(in srgb, #ff6b6b calc(100% - var(--sidebar-mark-brighten)), var(--sidebar-brighten-target) var(--sidebar-mark-brighten)); }
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-teal   { border-left-color: color-mix(in srgb, #4ecdc4 calc(100% - var(--sidebar-mark-brighten)), var(--sidebar-brighten-target) var(--sidebar-mark-brighten)); }
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-blue   { border-left-color: color-mix(in srgb, #45b7d1 calc(100% - var(--sidebar-mark-brighten)), var(--sidebar-brighten-target) var(--sidebar-mark-brighten)); }
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-green  { border-left-color: color-mix(in srgb, #96ceb4 calc(100% - var(--sidebar-mark-brighten)), var(--sidebar-brighten-target) var(--sidebar-mark-brighten)); }
+
+  /* Preset palette selection/active rings */
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-yellow.highlight-selected,
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-yellow:active { box-shadow: 0 0 0 1.5px color-mix(in srgb, #ffd700 calc(100% - var(--sidebar-mark-brighten)), var(--sidebar-brighten-target) var(--sidebar-mark-brighten)), var(--shadow-s) !important; }
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-red.highlight-selected,
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-red:active    { box-shadow: 0 0 0 1.5px color-mix(in srgb, #ff6b6b calc(100% - var(--sidebar-mark-brighten)), var(--sidebar-brighten-target) var(--sidebar-mark-brighten)), var(--shadow-s) !important; }
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-teal.highlight-selected,
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-teal:active   { box-shadow: 0 0 0 1.5px color-mix(in srgb, #4ecdc4 calc(100% - var(--sidebar-mark-brighten)), var(--sidebar-brighten-target) var(--sidebar-mark-brighten)), var(--shadow-s) !important; }
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-blue.highlight-selected,
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-blue:active   { box-shadow: 0 0 0 1.5px color-mix(in srgb, #45b7d1 calc(100% - var(--sidebar-mark-brighten)), var(--sidebar-brighten-target) var(--sidebar-mark-brighten)), var(--shadow-s) !important; }
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-green.highlight-selected,
+  .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-green:active  { box-shadow: 0 0 0 1.5px color-mix(in srgb, #96ceb4 calc(100% - var(--sidebar-mark-brighten)), var(--sidebar-brighten-target) var(--sidebar-mark-brighten)), var(--shadow-s) !important; }
+}
