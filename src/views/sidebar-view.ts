@@ -8,9 +8,15 @@ import { InlineFootnoteManager } from '../managers/inline-footnote-manager';
 import { SearchParser, SearchToken, ParsedSearch, ASTNode, OperatorNode, FilterNode, TextNode } from '../utils/search-parser';
 import { SimpleSearchManager } from '../managers/simple-search-manager';
 
+import { ScrollRestorer } from '../utils/scroll-restorer';
+import { RenderScheduler } from '../utils/render-scheduler';
+
 const VIEW_TYPE_HIGHLIGHTS = 'highlights-sidebar';
 
 export class HighlightsSidebarView extends ItemView {
+    private restorer: ScrollRestorer = new ScrollRestorer();
+    private scheduler: RenderScheduler = new RenderScheduler();
+
     plugin: HighlightCommentsPlugin;
     private searchInputEl!: HTMLInputElement;
     private listContainerEl!: HTMLElement;
@@ -414,50 +420,43 @@ export class HighlightsSidebarView extends ItemView {
         // Render the collection detail view
         this.renderContent();
     }
-
     refresh() {
         this.selectedTags.clear();
-        // When toolbar setting changes, we need to rebuild the entire view structure
-        // because onOpen() conditionally creates toolbar elements
-        
-        // Preserve current view mode and collection state
-        const currentViewMode = this.viewMode;
-        const currentCollectionId = this.currentCollectionId;
-        
-        // If we're in the middle of highlighting focus or color change, preserve that scroll position instead
+
+        const savedViewMode = this.viewMode;
+        const savedCollectionId = this.currentCollectionId;
+
         const shouldUseHighlightScroll = this.isHighlightFocusing || this.isColorChanging;
         const highlightScrollPosition = this.preservedScrollTop;
-        
-        // Capture current scroll position before rebuild (unless we're highlighting)
-        if (!shouldUseHighlightScroll) {
-            this.captureScrollPosition();
-        }
-        
-        this.onOpen();
-        
-        // Restore the view mode and collection state after DOM recreation
-        this.viewMode = currentViewMode;
-        this.currentCollectionId = currentCollectionId;
-        
-        // Update the tab states to reflect the current view mode
-        this.updateTabStates();
-        
-        // Restore selected highlight styling after DOM rebuild
-        this.restoreSelectedHighlight();
-        
-        // Restore appropriate scroll position after full rebuild
-        if (shouldUseHighlightScroll) {
-            // Use the preserved highlight scroll position
-            requestAnimationFrame(() => {
-                if (this.contentAreaEl) {
-                    this.contentAreaEl.scrollTop = highlightScrollPosition;
-                }
-            });
-        } else {
-            // Use normal scroll restoration
-            this.restoreScrollPosition();
-        }
+
+        this.scheduler.request("full", (finalKind) => {
+            if (!shouldUseHighlightScroll && this.contentAreaEl) {
+                this.restorer.capture(this.contentAreaEl, "[data-highlight-id]");
+            }
+
+            if (finalKind === "full") {
+                this.onOpen();
+            } else {
+                this.renderContent();
+            }
+
+            this.viewMode = savedViewMode;
+            this.currentCollectionId = savedCollectionId;
+            this.updateTabStates();
+            this.restoreSelectedHighlight();
+
+            if (shouldUseHighlightScroll) {
+                requestAnimationFrame(() => {
+                    if (this.contentAreaEl) {
+                        this.contentAreaEl.scrollTop = highlightScrollPosition;
+                    }
+                });
+            } else if (this.contentAreaEl) {
+                this.restorer.restore(this.contentAreaEl, "[data-highlight-id]");
+            }
+        });
     }
+
 
     private updateTabStates() {
         // Get tabs by their order since they don't have data-tab attributes
@@ -547,11 +546,14 @@ export class HighlightsSidebarView extends ItemView {
      * Use for: file switches, search changes, bulk content updates
      */
     public updateContent() {
-        
-        // Simplified: just use renderContent() which handles all view modes properly with consistent grouping
-        // The performance benefit of the old populate methods was minimal compared to the maintenance burden
-        this.renderContent();
+        this.scheduler.request("content", (finalKind) => {
+            if (this.contentAreaEl) this.restorer.capture(this.contentAreaEl, "[data-highlight-id]");
+            if (finalKind === "full") this.onOpen();
+            else this.renderContent();
+            if (this.contentAreaEl) this.restorer.restore(this.contentAreaEl, "[data-highlight-id]");
+        });
     }
+
 
 
     /**
