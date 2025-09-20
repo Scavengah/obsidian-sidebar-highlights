@@ -1,3 +1,25 @@
+
+/* === Sidebar Highlights: dynamic UI color mapping === */
+/* The TS will set --hl-ui-rgb on each card; fall back to theme var if unset */
+.highlight-item-card { --hl-ui-rgb: var(--text-highlight-bg-rgb); }
+
+/* Make left stripe read from the dynamic var */
+.highlight-item-card .left-border {
+  border-left: 5px solid rgb(var(--hl-ui-rgb));
+}
+
+/* Non-selected cards get a subtle colored outline */
+.highlight-item-card {
+  box-shadow: 0 0 0 1.5px rgba(var(--hl-ui-rgb), 0.50), var(--shadow-s);
+}
+
+/* Selected card: stronger outline with same hue */
+.highlight-item-card.highlight-selected {
+  box-shadow: 0 0 0 2px rgba(var(--hl-ui-rgb), 0.80), var(--shadow-m);
+}
+/* === End dynamic color mapping === */
+
+
 /* Utility classes for show/hide functionality */
 .hidden {
     display: none !important;
@@ -1692,3 +1714,17 @@ body.theme-highlight-green .cm-highlight {
   .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-green.highlight-selected,
   .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-origin-html.highlight-color-green:active  { box-shadow: 0 0 0 1.5px color-mix(in srgb, #96ceb4 calc(100% - var(--sidebar-mark-brighten)), var(--sidebar-brighten-target) var(--sidebar-mark-brighten)), var(--shadow-s) !important; }
 }
+
+
+/* ==== Sidebar Highlights: force vivid UI color (strong override) ==== */
+.highlight-item-card { --hl-ui-rgb: var(--text-highlight-bg-rgb); }
+
+/* Force border-left color to our UI color regardless of earlier rules */
+.highlight-item-card {
+  border-left-color: rgb(var(--hl-ui-rgb)) !important;
+  box-shadow: 0 0 0 1.5px rgba(var(--hl-ui-rgb), 0.50), var(--shadow-s) !important;
+}
+.highlight-item-card.highlight-selected {
+  box-shadow: 0 0 0 2px rgba(var(--hl-ui-rgb), 0.80), var(--shadow-m) !important;
+}
+/* ================================================================ */

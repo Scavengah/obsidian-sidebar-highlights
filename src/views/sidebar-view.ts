@@ -532,11 +532,10 @@ export class HighlightsSidebarView extends ItemView {
     }
 
     private applyHighlightColorStyling(element: HTMLElement, highlight: Highlight) {
-        const highlightColor = highlight.color || this.plugin.settings.highlightColor;
+        const _docColor = highlight.color || this.plugin.settings.highlightColor;
+        const highlightColor = this.getUiColorFromDoc(_docColor);
         element.style.borderLeftColor = highlightColor;
-        if (!highlight.isNativeComment) {
-            element.style.boxShadow = `0 0 0 1.5px ${highlightColor}, var(--shadow-s)`;
-        }
+        element.style.boxShadow = `0 0 0 1.5px ${highlightColor}, var(--shadow-s)`;
     }
 
     // === MINIMAL-REFRESH ARCHITECTURE ===
@@ -1422,9 +1421,14 @@ export class HighlightsSidebarView extends ItemView {
                                 // Find the highlight data to get the updated color
                                 const selectedHighlight = this.getHighlightById(this.plugin.selectedHighlightId);
                                 if (selectedHighlight) {
-                                    const highlightColor = selectedHighlight.color || this.plugin.settings.highlightColor;
+                                    const _docColor = selectedHighlight.color || this.plugin.settings.highlightColor;
+                                    const highlightColor = this.getUiColorFromDoc(_docColor);
                                     selectedEl.style.borderLeftColor = highlightColor;
-                                    if (!selectedHighlight.isNativeComment) {
+                selectedEl.style.setProperty('--hl-ui-rgb', this.toRgbTupleString(highlightColor));
+                selectedEl.style.setProperty('--text-highlight-bg-rgb', this.toRgbTupleString(highlightColor));
+                                    
+                selectedEl.style.setProperty('--text-highlight-bg-rgb', this.toRgbTupleString(highlightColor));
+                selectedEl.style.setProperty('--hl-ui-rgb', this.toRgbTupleString(highlightColor));if (!selectedHighlight.isNativeComment) {
                                         selectedEl.style.boxShadow = `0 0 0 1.5px ${highlightColor}, var(--shadow-s)`;
                                     }
                                 }
@@ -1869,11 +1873,10 @@ export class HighlightsSidebarView extends ItemView {
                 newEl.classList.add('highlight-selected');
                 
                 // Update border color and box-shadow to reflect current color
-                const highlightColor = newHighlight.color || this.plugin.settings.highlightColor;
+                const _docColor = newHighlight.color || this.plugin.settings.highlightColor;
+                const highlightColor = this.getUiColorFromDoc(_docColor);
                 newEl.style.borderLeftColor = highlightColor;
-                if (!newHighlight.isNativeComment) {
-                    newEl.style.boxShadow = `0 0 0 1.5px ${highlightColor}, var(--shadow-s)`;
-                }
+                newEl.style.boxShadow = `0 0 0 1.5px ${highlightColor}, var(--shadow-s)`;
             }
         }
         
@@ -2428,15 +2431,72 @@ export class HighlightsSidebarView extends ItemView {
             return customNames.green.trim();
         }
         
-        // Check user-defined extras
-        const extrasHC = this.plugin.settings.extraColors || [];
-        const foundHC = extrasHC.find((c: any) => (c.hex || '').toLowerCase() === (hex || '').toLowerCase());
-        if (foundHC && foundHC.name && foundHC.name.trim()) { return foundHC.name.trim(); }
         // Fall back to hex code
+        const extrasDP = this.plugin.settings.extraColors || [];
+        const foundByUI = extrasDP.find((c: any) => (c.ui || '').toLowerCase() === (hex || '').toLowerCase());
+        if (foundByUI && foundByUI.name && foundByUI.name.trim()) return foundByUI.name.trim();
+        const foundByDoc = extrasDP.find((c: any) => (c.doc || '').toLowerCase() === (hex || '').toLowerCase());
+        if (foundByDoc && foundByDoc.name && foundByDoc.name.trim()) return foundByDoc.name.trim();
         return hex;
     }
 
-    private renderGroupedHighlights(highlights: Highlight[], searchTerm?: string, showFilename: boolean = false) {
+    
+    
+    private normalizeColor6(hex?: string): string {
+        if (!hex) return '';
+        let h = hex.trim().toLowerCase();
+        // handle rgb/rgba
+        if (h.startsWith('rgba') || h.startsWith('rgb')) {
+            const nums = h.replace(/rgba?\(|\)/g, '').split(',').map(x => parseFloat(x.trim()));
+            const r = Math.max(0, Math.min(255, Math.round(nums[0] || 0)));
+            const g = Math.max(0, Math.min(255, Math.round(nums[1] || 0)));
+            const b = Math.max(0, Math.min(255, Math.round(nums[2] || 0)));
+            const toHex = (n:number) => ('0' + n.toString(16)).slice(-2);
+            return '#' + toHex(r) + toHex(g) + toHex(b);
+        }
+        if (h.startsWith('#')) h = h.slice(1);
+        if (h.length === 8) h = h.slice(0,6);
+        if (h.length === 3) h = h.split('').map(c => c + c).join('');
+        if (h.length < 6) h = (h + '000000').slice(0,6);
+        return '#' + h;
+    }
+
+    
+    private toRgbTupleString(input: string): string {
+        if (!input) return '255, 215, 0';
+        const norm = this.normalizeColor6(input);
+        if (norm.startsWith('#')) {
+            const h = norm.slice(1);
+            const r = parseInt(h.slice(0,2), 16);
+            const g = parseInt(h.slice(2,4), 16);
+            const b = parseInt(h.slice(4,6), 16);
+            return `${r}, ${g}, ${b}`;
+        }
+        const m = input.match(/rgba?\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+        if (m) return `${m[1]}, ${m[2]}, ${m[3]}`;
+        return '255, 215, 0';
+    }
+private getUiColorFromDoc(hex: string): string {
+        const s = this.plugin.settings;
+        const colors = s.customColors;
+        const docs = s.customColorsDoc ?? colors;
+        const hx = this.normalizeColor6(hex);
+
+        // defaults mapping (compare normalized)
+        if (this.normalizeColor6(docs.yellow) === hx) return this.normalizeColor6(colors.yellow);
+        if (this.normalizeColor6(docs.red)    === hx) return this.normalizeColor6(colors.red);
+        if (this.normalizeColor6(docs.teal)   === hx) return this.normalizeColor6(colors.teal);
+        if (this.normalizeColor6(docs.blue)   === hx) return this.normalizeColor6(colors.blue);
+        if (this.normalizeColor6(docs.green)  === hx) return this.normalizeColor6(colors.green);
+
+        const extras = (s.extraColors || []) as any[];
+        const foundDoc = extras.find(c => this.normalizeColor6(c?.doc) === hx);
+        if (foundDoc) return this.normalizeColor6(foundDoc.ui || hex);
+        const foundUi = extras.find(c => this.normalizeColor6(c?.ui) === hx);
+        if (foundUi) return this.normalizeColor6(foundUi.ui || hex);
+        return this.normalizeColor6(hex);
+    }
+private renderGroupedHighlights(highlights: Highlight[], searchTerm?: string, showFilename: boolean = false) {
         const groups = new Map<string, Highlight[]>();
         const groupColors = new Map<string, string>(); // Track the actual hex color for each group
 

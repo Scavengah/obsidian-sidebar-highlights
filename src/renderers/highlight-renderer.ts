@@ -586,8 +586,8 @@ export class HighlightRenderer {
             this.plugin.settings.customColors.blue,
             this.plugin.settings.customColors.green
         ];
-        const extras = (this.plugin.settings.extraColors || []).map(c => c.hex).filter(Boolean);
-        const colors = [...baseColors, ...extras];
+        const extras = (this.plugin.settings.extraColors || []).map((c: any) => c?.ui ?? c?.hex).filter(Boolean);
+        const colors = extras.length ? extras : baseColors;
         
         colors.forEach((color, index) => {
             const colorOption = colorOptionsContainer.createDiv({

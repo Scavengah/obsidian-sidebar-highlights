@@ -57,6 +57,13 @@ export interface CommentPluginSettings {
         blue: string;
         green: string;
     };
+    customColorsDoc: {
+        yellow: string;
+        red: string;
+        teal: string;
+        blue: string;
+        green: string;
+    };
     customColorNames: {
         yellow: string;
         red: string;
@@ -64,7 +71,7 @@ export interface CommentPluginSettings {
         blue: string;
         green: string;
     };
-    extraColors: Array<{ hex: string; name: string }>;
+    extraColors: Array<{ ui: string; doc: string; name: string; linked?: boolean }>;
 }
 
 const DEFAULT_SETTINGS: CommentPluginSettings = {
@@ -89,6 +96,13 @@ const DEFAULT_SETTINGS: CommentPluginSettings = {
     detailsFontSize: 11, // Default details font size
     commentFontSize: 11, // Default comment text font size
     customColors: {
+        yellow: '#ffd700',
+        red: '#ff6b6b',
+        teal: '#4ecdc4',
+        blue: '#45b7d1',
+        green: '#96ceb4'
+    },
+    customColorsDoc: {
         yellow: '#ffd700',
         red: '#ff6b6b',
         teal: '#4ecdc4',
@@ -328,22 +342,8 @@ export default class HighlightCommentsPlugin extends Plugin {
         
         // Apply new theme class
         const themeClass = this.getHighlightThemeClass(this.settings.highlightColor);
-        
-        const _defaultsHC = [
-            this.settings.customColors.yellow,
-            this.settings.customColors.red,
-            this.settings.customColors.teal,
-            this.settings.customColors.blue,
-            this.settings.customColors.green,
-        ];
-        if (_defaultsHC.includes(this.settings.highlightColor)) {
-            document.body.classList.add(themeClass);
-            document.body.style.removeProperty('--theme-highlight-color');
-        } else {
-            document.body.classList.add('theme-highlight-custom');
-            document.body.style.setProperty('--theme-highlight-color', this.settings.highlightColor);
-        }
-        }
+        document.body.classList.add(themeClass);
+    }
 
     private removeHighlightTheme() {
         const themeClasses = [
@@ -352,7 +352,7 @@ export default class HighlightCommentsPlugin extends Plugin {
             'theme-highlight-red',
             'theme-highlight-teal',
             'theme-highlight-blue',
-            'theme-highlight-green', 'theme-highlight-custom'
+            'theme-highlight-green'
         ];
         
         themeClasses.forEach(className => {
@@ -404,9 +404,7 @@ export default class HighlightCommentsPlugin extends Plugin {
             body.theme-highlight-red .cm-highlight { background-color: ${this.settings.customColors.red}66 !important; }
             body.theme-highlight-teal .cm-highlight { background-color: ${this.settings.customColors.teal}66 !important; }
             body.theme-highlight-blue .cm-highlight { background-color: ${this.settings.customColors.blue}66 !important; }
-            body.theme-highlight-green .cm-highlight { background-color: ${this.settings.customColors.green}
-            body.theme-highlight-custom .cm-highlight { background-color: var(--theme-highlight-color)66 !important; }
-66 !important; }
+            body.theme-highlight-green .cm-highlight { background-color: ${this.settings.customColors.green}66 !important; }
             
             /* Dynamic highlight card border colors */
             .highlight-item-card.highlight-color-yellow { border-left-color: ${this.settings.customColors.yellow} !important; }
@@ -2108,64 +2106,216 @@ class HighlightSettingTab extends PluginSettingTab {
                 }));
 
         
-        // Additional colors (HC)
-        new Setting(containerEl).setHeading().setName('Additional colors');
+        // Document colors (defaults)
+        new Setting(containerEl).setHeading().setName('Document colors (for in-document highlights)');
+        new Setting(containerEl)
+            .setName('Yellow — document')
+            .addColorPicker(p => p.setValue(this.plugin.settings.customColorsDoc.yellow).onChange(async (v) => {
+                this.plugin.settings.customColorsDoc.yellow = v; await this.plugin.saveSettings(); this.plugin.updateStyles();
+            }));
+        new Setting(containerEl)
+            .setName('Red — document')
+            .addColorPicker(p => p.setValue(this.plugin.settings.customColorsDoc.red).onChange(async (v) => {
+                this.plugin.settings.customColorsDoc.red = v; await this.plugin.saveSettings(); this.plugin.updateStyles();
+            }));
+        new Setting(containerEl)
+            .setName('Teal — document')
+            .addColorPicker(p => p.setValue(this.plugin.settings.customColorsDoc.teal).onChange(async (v) => {
+                this.plugin.settings.customColorsDoc.teal = v; await this.plugin.saveSettings(); this.plugin.updateStyles();
+            }));
+        new Setting(containerEl)
+            .setName('Blue — document')
+            .addColorPicker(p => p.setValue(this.plugin.settings.customColorsDoc.blue).onChange(async (v) => {
+                this.plugin.settings.customColorsDoc.blue = v; await this.plugin.saveSettings(); this.plugin.updateStyles();
+            }));
+        new Setting(containerEl)
+            .setName('Green — document')
+            .addColorPicker(p => p.setValue(this.plugin.settings.customColorsDoc.green).onChange(async (v) => {
+                this.plugin.settings.customColorsDoc.green = v; await this.plugin.saveSettings(); this.plugin.updateStyles();
+            }));
 
-        // Container for dynamic rows
-        const extrasContainerHC = containerEl.createDiv({ cls: 'extra-colors-section' });
-
-        const renderExtrasHC = () => {
-            extrasContainerHC.empty();
-            const arr = this.plugin.settings.extraColors || [];
-            arr.forEach((c, idx) => {
-                const row = new Setting(extrasContainerHC);
+        // Additional colors (UI + Doc)
+        new Setting(containerEl).setHeading().setName('Highlights palette');
+        const extrasContainerDP = containerEl.createDiv({ cls: 'extra-colors-section' });
+        const renderExtrasDP = () => {
+            extrasContainerDP.empty();
+            (this.plugin.settings.extraColors || []).forEach((c, idx) => {
+                const row = new Setting(extrasContainerDP);
                 row.settingEl.classList.add('extra-color-setting');
-                row
-                    .setName(`Extra color ${idx + 1}: ${(c.hex || '#cccccc').toUpperCase()}`)
-                    .setDesc('Name is optional; used in Group by Color.')
-                    .addColorPicker(p => {
-                        p.setValue(c.hex || '#cccccc').onChange(async (v) => {
-                            this.plugin.settings.extraColors[idx].hex = v;
-                            await this.plugin.saveSettings();
-                            row.setName(`Extra color ${idx + 1}: ${v.toUpperCase()}`);
-                            this.plugin.refreshSidebar();
-                        });
-                    })
-                    .addText(t => {
-                        t.setPlaceholder('e.g., "Important", "Research"')
-                         .setValue(c.name || '')
-                         .onChange(async (v) => {
-                            this.plugin.settings.extraColors[idx].name = v;
-                            await this.plugin.saveSettings();
-                            this.plugin.refreshSidebar();
-                         });
-                    })
-                    .addExtraButton(btn => {
-                        btn.setIcon('trash')
-                           .setTooltip('Remove this color')
-                           .onClick(async () => {
-                               this.plugin.settings.extraColors.splice(idx, 1);
-                               await this.plugin.saveSettings();
-                               renderExtrasHC();
-                               this.plugin.refreshSidebar();
-                           });
-                    });
+                row.setName(`Highlight ${idx + 1}`)
+                   .setDesc('Sidebar/UI vs Document color');
+                row.addColorPicker(p => p.setValue(c.ui || '#cccccc').onChange(async (v) => {
+                        this.plugin.settings.extraColors[idx].ui = v;
+                        if (this.plugin.settings.extraColors[idx].linked) {
+                            this.plugin.settings.extraColors[idx].doc = v;
+                        }
+                        await this.plugin.saveSettings(); this.plugin.refreshSidebar();
+                    }))
+                   .addColorPicker(p => p.setValue(c.doc || c.ui || '#cccccc').onChange(async (v) => {
+                        this.plugin.settings.extraColors[idx].doc = v;
+                        this.plugin.settings.extraColors[idx].linked = false;
+                        await this.plugin.saveSettings(); this.plugin.updateStyles();
+                    }))
+                   .addToggle(t => t.setValue(!!c.linked).setTooltip('Link doc to UI').onChange(async (val) => {
+                        this.plugin.settings.extraColors[idx].linked = val;
+                        if (val) this.plugin.settings.extraColors[idx].doc = this.plugin.settings.extraColors[idx].ui;
+                        await this.plugin.saveSettings(); this.plugin.updateStyles();
+                    }))
+                   .addText(t => t.setPlaceholder('Name (optional)').setValue(c.name || '').onChange(async (v) => {
+                        this.plugin.settings.extraColors[idx].name = v; await this.plugin.saveSettings(); this.plugin.refreshSidebar();
+                    }))
+                   .addExtraButton(btn => btn.setIcon('trash-2').setTooltip('Remove').onClick(async () => {
+                        this.plugin.settings.extraColors.splice(idx, 1); await this.plugin.saveSettings(); renderExtrasDP();
+        // Remove legacy default color controls so only Additional colors remains
+        const pruneDefaultColorControls = () => {
+            const items = Array.from(containerEl.querySelectorAll('.setting-item'));
+            for (const el of items) {
+                const nameEl = el.querySelector('.setting-item-name') as HTMLElement | null;
+                if (!nameEl) continue;
+                const t = (nameEl.textContent || '').toLowerCase().trim();
+                if (
+                    t.startsWith('highlight color') ||
+                    t === 'highlight name' ||
+                    t.includes('document colors (for in-document highlights)') ||
+                    t.endsWith('— document') // e.g., "Yellow — document"
+                ) {
+                    el.remove();
+                }
+            }
+        };
+        pruneDefaultColorControls(); this.plugin.refreshSidebar();
+                   }));
             });
         };
+        renderExtrasDP();
+        // Remove legacy default color controls so only Additional colors remains
+        const pruneDefaultColorControls = () => {
+            const items = Array.from(containerEl.querySelectorAll('.setting-item'));
+            for (const el of items) {
+                const nameEl = el.querySelector('.setting-item-name') as HTMLElement | null;
+                if (!nameEl) continue;
+                const t = (nameEl.textContent || '').toLowerCase().trim();
+                if (
+                    t.startsWith('highlight color') ||
+                    t === 'highlight name' ||
+                    t.includes('document colors (for in-document highlights)') ||
+                    t.endsWith('— document') // e.g., "Yellow — document"
+                ) {
+                    el.remove();
+                }
+            }
+        };
+        pruneDefaultColorControls();
+        new Setting(containerEl).addButton(b => b.setButtonText('Add color').onClick(async () => {
+            this.plugin.settings.extraColors = this.plugin.settings.extraColors || [];
+            this.plugin.settings.extraColors.push({ ui: '#cccccc', doc: '#cccccc', name: '', linked: true });
+            await this.plugin.saveSettings(); renderExtrasDP();
+        // Remove legacy default color controls so only Additional colors remains
+        const pruneDefaultColorControls = () => {
+            const items = Array.from(containerEl.querySelectorAll('.setting-item'));
+            for (const el of items) {
+                const nameEl = el.querySelector('.setting-item-name') as HTMLElement | null;
+                if (!nameEl) continue;
+                const t = (nameEl.textContent || '').toLowerCase().trim();
+                if (
+                    t.startsWith('highlight color') ||
+                    t === 'highlight name' ||
+                    t.includes('document colors (for in-document highlights)') ||
+                    t.endsWith('— document') // e.g., "Yellow — document"
+                ) {
+                    el.remove();
+                }
+            }
+        };
+        pruneDefaultColorControls();
+        }));
 
-        renderExtrasHC();
+        
 
         new Setting(containerEl)
-            .addButton(b => {
-                b.setButtonText('Add color')
-                 .onClick(async () => {
+            .addButton(b => b
+                .setButtonText('Add default colors')
+                .setTooltip('Insert the standard set (skips ones you already have)')
+                .onClick(async () => {
+                    // helpers
+                    const stripAlpha = (h: string) => {
+                        const m = (h || '').replace('#','');
+                        return '#' + (m.length >= 6 ? m.slice(0,6) : m.padEnd(6,'0'));
+                    };
+                    const deriveUiFromDoc = (hex: string): string => {
+                        const toHsl = (h: string) => {
+                            const m = h.replace('#','');
+                            const r = parseInt(m.slice(0,2),16)/255;
+                            const g = parseInt(m.slice(2,4),16)/255;
+                            const b = parseInt(m.slice(4,6),16)/255;
+                            const max = Math.max(r,g,b), min = Math.min(r,g,b);
+                            let hh=0, s=0, l=(max+min)/2;
+                            if (max!==min) {
+                                const d = max-min;
+                                s = l>0.5 ? d/(2-max-min) : d/(max+min);
+                                switch(max){
+                                    case r: hh = (g-b)/d + (g<b?6:0); break;
+                                    case g: hh = (b-r)/d + 2; break;
+                                    case b: hh = (r-g)/d + 4; break;
+                                }
+                                hh /= 6;
+                            }
+                            return {h:hh, s, l};
+                        };
+                        const fromHsl = (h:number,s:number,l:number) => {
+                            const hue2rgb=(p:number,q:number,t:number)=>{
+                                if(t<0) t+=1; if(t>1) t-=1;
+                                if(t<1/6) return p+(q-p)*6*t;
+                                if(t<1/2) return q;
+                                if(t<2/3) return p+(q-p)*(2/3 - t)*6;
+                                return p;
+                            };
+                            let r:number,g:number,b:number;
+                            if(s===0){ r=g=b=l; }
+                            else{
+                                const q = l < 0.5 ? l*(1+s) : l + s - l*s;
+                                const p = 2*l - q;
+                                r = hue2rgb(p,q,h+1/3);
+                                g = hue2rgb(p,q,h);
+                                b = hue2rgb(p,q,h-1/3);
+                            }
+                            const toHex=(x:number)=>('0'+Math.round(x*255).toString(16)).slice(-2);
+                            return '#' + toHex(r) + toHex(g) + toHex(b);
+                        };
+                        const {h,s,l} = toHsl(hex);
+                        const s2 = Math.min(1, s*1.15 + 0.25);
+                        let l2 = l;
+                        if (l < 0.45) l2 = 0.55;
+                        if (l > 0.7) l2 = 0.6;
+                        return fromHsl(h, s2, l2);
+                    };
+                    const defaults = [
+                        { name: 'KeyHighlight',         doc: stripAlpha('#876E00A1') },
+                        { name: 'FurtherResearch',      doc: stripAlpha('#182687BF') },
+                        { name: 'ConceptualWord',       doc: stripAlpha('#7C1872DB') },
+                        { name: 'UseInArt',             doc: stripAlpha('#735581C2') },
+                        { name: 'DoNotFullyUnderstand', doc: stripAlpha('#2F7217D4') },
+                        { name: 'DoNotAgree',           doc: stripAlpha('#940000A8') },
+                        { name: 'WordDefine',           doc: stripAlpha('#3C3E42')   },
+                    ];
                     this.plugin.settings.extraColors = this.plugin.settings.extraColors || [];
-                    this.plugin.settings.extraColors.push({ hex: '#cccccc', name: '' });
+                    for (const d of defaults) {
+                        const exists = this.plugin.settings.extraColors.some((c:any) => 
+                            (c.name || '').toLowerCase() === d.name.toLowerCase());
+                        if (!exists) {
+                            this.plugin.settings.extraColors.push({
+                                name: d.name,
+                                doc: d.doc,
+                                ui: deriveUiFromDoc(d.doc),
+                                linked: false
+                            });
+                        }
+                    }
                     await this.plugin.saveSettings();
-                    renderExtrasHC();
-                 });
-            });
-
+                    renderExtrasDP();
+                    this.plugin.refreshSidebar();
+                    this.plugin.updateStyles();
+                }));
 // COMMENTS SECTION
         new Setting(containerEl).setHeading().setName('Comments');
 
