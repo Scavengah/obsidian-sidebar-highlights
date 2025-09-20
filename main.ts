@@ -1,5 +1,38 @@
+
+class MarkPaletteModal extends SuggestModal<{ name: string; ui: string; doc: string }> {
+    private plugin: any;
+    constructor(plugin: any) {
+        super(plugin.app);
+        this.plugin = plugin;
+        this.setPlaceholder('Choose a highlight type…');
+    }
+    getSuggestions(query: string) {
+        const list = (this.plugin.settings.extraColors || []).map((c: any, idx: number) => ({
+            name: c.name || `Highlight ${idx + 1}`,
+            ui: c.ui || '#cccccc',
+            doc: c.doc || c.ui || '#cccccc',
+        }));
+        const q = (query || '').toLowerCase().trim();
+        return list.filter(x => x.name.toLowerCase().includes(q));
+    }
+    renderSuggestion(value: { name: string; ui: string; doc: string }, el: HTMLElement) {
+        el.addClass('mod-search-suggestion');
+        const row = el.createDiv({ cls: 'mark-palette-row' });
+        const uiSw = row.createSpan({ cls: 'swatch' });
+        (uiSw as HTMLElement).style.background = value.ui;
+        const docSw = row.createSpan({ cls: 'swatch doc' });
+        (docSw as HTMLElement).style.background = value.doc;
+        row.createSpan({ cls: 'label', text: value.name });
+    }
+    onChooseSuggestion(value: { name: string; ui: string; doc: string }) {
+        const editor = this.plugin.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
+        if (!editor) return;
+        this.plugin._applyMarkToSelection(editor, value);
+    }
+}
+
 // main.ts
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf, debounce } from 'obsidian';
+import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf, debounce , SuggestModal} from 'obsidian';
 import { HighlightsSidebarView } from './src/views/sidebar-view';
 import { InlineFootnoteManager } from './src/managers/inline-footnote-manager';
 import { ExcludedFilesModal } from './src/modals/excluded-files-modal';
@@ -121,6 +154,43 @@ const DEFAULT_SETTINGS: CommentPluginSettings = {
 const VIEW_TYPE_HIGHLIGHTS = 'highlights-sidebar';
 
 export default class HighlightCommentsPlugin extends Plugin {
+    // Track dynamically registered mark commands to avoid duplicates this session
+    private _registeredMarkCmdIds: Set<string> = new Set();
+
+    private registerMarkCommands() {
+        const list = (this.settings.extraColors || []).map((c: any, idx: number) => {
+            const name = c.name || `Highlight ${idx + 1}`;
+            const slug = (name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+            return { name, slug, ui: c.ui || '#cccccc', doc: c.doc || c.ui || '#cccccc' };
+        });
+
+        list.forEach(item => {
+            const id = `mark-with-${item.slug || 'highlight'}`;
+            if (this._registeredMarkCmdIds.has(id)) return;
+            this.addCommand({
+                id,
+                name: `Mark: ${item.name}`,
+                editorCallback: (editor: Editor) => {
+                    this._applyMarkToSelection(editor, { name: item.name, ui: item.ui, doc: item.doc });
+                }
+            });
+            this._registeredMarkCmdIds.add(id);
+        });
+    }
+
+// --- Mark-tag helpers ---
+private _slugifyName(name: string): string {
+    return (name || 'highlight')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+}
+private _stripAlphaHex(hex: string): string {
+    if (!hex) return '#cccccc';
+    const m = (hex + '').replace('#','');
+    return '#' + (m.length >= 6 ? m.slice(0,6) : m.padEnd(6,'0'));
+}
+
     settings: CommentPluginSettings;
     highlights: Map<string, Highlight[]> = new Map();
     collections: Map<string, Collection> = new Map();
@@ -131,8 +201,59 @@ export default class HighlightCommentsPlugin extends Plugin {
     public selectedHighlightId: string | null = null;
     public collectionCommands: Set<string> = new Set(); // Track registered collection commands
 
-    async onload() {
+    
+private _applyMarkToSelection(editor: Editor, item: { name: string; ui: string; doc: string }) {
+    const docHex = this._stripAlphaHex(item?.doc || item?.ui || this.settings.customColors.yellow);
+    const cls = `sbh-${this._slugifyName(item?.name || '')}`;
+    const openTag = `<mark class="${cls}" style="background: ${docHex};">`;
+    const closeTag = `</mark>`;
+
+    const sel = editor.getSelection();
+    if (sel && /^<mark[\s\S]*>[\s\S]*<\/mark>$/.test(sel)) {
+        const inner = sel.replace(/^<mark[^>]*>/, '').replace(/<\/mark>$/, '');
+        editor.replaceSelection(inner);
+        new Notice('Removed mark');
+        return;
+    }
+
+    editor.replaceSelection(openTag + sel + closeTag);
+
+    if (!sel || sel.length === 0) {
+        const cursor = editor.getCursor();
+        const newPos = { line: cursor.line, ch: cursor.ch - closeTag.length };
+        editor.setCursor(newPos);
+    }
+    new Notice(`Marked as ${item?.name || 'highlight'}`);
+}
+
+async onload() {
         await this.loadSettings();
+
+// --- Register mark-tag commands ---
+this.addCommand({
+    id: 'mark-tag-choose',
+    name: 'Mark selection with <mark>…',
+    editorCallback: (editor) => {
+        new MarkPaletteModal(this).open();
+    }
+});
+        this.addCommand({
+            id: 'rebuild-mark-commands',
+            name: 'Rebuild mark commands (palette)',
+            callback: () => { this.registerMarkCommands(); new Notice('Mark commands rebuilt'); }
+        });
+
+
+(this.settings.extraColors || []).forEach((c, idx) => {
+    const name = c.name || `Highlight ${idx + 1}`;
+    const slug = this._slugifyName(name);
+    this.addCommand({
+        id: `mark-tag-${slug || idx}`,
+        name: `Mark selection with <mark>: ${name}`,
+        editorCallback: (editor) => this._applyMarkToSelection(editor, {name, ui: c.ui, doc: c.doc || c.ui})
+    });
+});
+
         
         this.highlights = new Map(Object.entries(this.settings.highlights || {}));
         this.collections = new Map(Object.entries(this.settings.collections || {}));
@@ -509,6 +630,26 @@ export default class HighlightCommentsPlugin extends Plugin {
     async reloadAllSettings() {
         // Reload settings from disk to get latest external changes
         await this.loadSettings();
+
+// --- Register mark-tag commands ---
+this.addCommand({
+    id: 'mark-tag-choose',
+    name: 'Mark selection with <mark>…',
+    editorCallback: (editor) => {
+        new MarkPaletteModal(this).open();
+    }
+});
+
+(this.settings.extraColors || []).forEach((c, idx) => {
+    const name = c.name || `Highlight ${idx + 1}`;
+    const slug = this._slugifyName(name);
+    this.addCommand({
+        id: `mark-tag-${slug || idx}`,
+        name: `Mark selection with <mark>: ${name}`,
+        editorCallback: (editor) => this._applyMarkToSelection(editor, {name, ui: c.ui, doc: c.doc || c.ui})
+    });
+});
+
         
         // Update collections map with the reloaded data
         this.collections = new Map(Object.entries(this.settings.collections || {}));

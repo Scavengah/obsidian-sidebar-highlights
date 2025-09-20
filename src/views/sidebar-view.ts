@@ -531,12 +531,17 @@ export class HighlightsSidebarView extends ItemView {
         });
     }
 
+    
     private applyHighlightColorStyling(element: HTMLElement, highlight: Highlight) {
         const _docColor = highlight.color || this.plugin.settings.highlightColor;
         const highlightColor = this.getUiColorFromDoc(_docColor);
+        const rgb = this.toRgbTupleString(highlightColor);
+        // One source of truth: set variables once; CSS handles outlines/strips
         element.style.borderLeftColor = highlightColor;
-        element.style.boxShadow = `0 0 0 1.5px ${highlightColor}, var(--shadow-s)`;
+        element.style.setProperty('--hl-ui-rgb', rgb);
+        element.style.setProperty('--text-highlight-bg-rgb', rgb);
     }
+
 
     // === MINIMAL-REFRESH ARCHITECTURE ===
     
@@ -551,7 +556,10 @@ export class HighlightsSidebarView extends ItemView {
             else this.renderContent();
             if (this.contentAreaEl) this.restorer.restore(this.contentAreaEl, "[data-highlight-id]");
         });
-    }
+    
+        // ensure UI color variables are applied to all cards
+        this.applyUiColorToAllCards();
+}
 
 
 
@@ -623,7 +631,10 @@ export class HighlightsSidebarView extends ItemView {
         
         // Restore scroll position after DOM rebuild
         this.restoreScrollPosition();
-    }
+    
+        // ensure UI color variables are applied to all cards
+        this.applyUiColorToAllCards();
+}
 
     private renderCollectionsView() {
         // Capture scroll position before DOM rebuild
@@ -791,7 +802,10 @@ export class HighlightsSidebarView extends ItemView {
         } else {
             this.renderGroupedHighlights(filteredHighlights, searchTerm, true); // true for showFilename
         }
-    }
+    
+        // ensure UI color variables are applied to all cards
+        this.applyUiColorToAllCards();
+}
 
     private renderFilteredList() {
         if (!this.contentAreaEl || !this.listContainerEl) {
@@ -1414,30 +1428,28 @@ export class HighlightsSidebarView extends ItemView {
                         this.contentAreaEl.scrollTop = this.preservedScrollTop;
                         this.isColorChanging = false;
                         
+                        
                         // Ensure the selected highlight styling is correct after color group change
                         if (this.plugin.selectedHighlightId) {
-                            const selectedEl = this.containerEl.querySelector(`[data-highlight-id="${this.plugin.selectedHighlightId}"]`) as HTMLElement;
+                            const selectedEl = this.containerEl.querySelector(`[data-highlight-id="${this.plugin.selectedHighlightId}"]`) as HTMLElement | null;
                             if (selectedEl) {
                                 // Find the highlight data to get the updated color
                                 const selectedHighlight = this.getHighlightById(this.plugin.selectedHighlightId);
                                 if (selectedHighlight) {
                                     const _docColor = selectedHighlight.color || this.plugin.settings.highlightColor;
                                     const highlightColor = this.getUiColorFromDoc(_docColor);
+                                    const rgb = this.toRgbTupleString(highlightColor);
                                     selectedEl.style.borderLeftColor = highlightColor;
-                selectedEl.style.setProperty('--hl-ui-rgb', this.toRgbTupleString(highlightColor));
-                selectedEl.style.setProperty('--text-highlight-bg-rgb', this.toRgbTupleString(highlightColor));
-                                    
-                selectedEl.style.setProperty('--text-highlight-bg-rgb', this.toRgbTupleString(highlightColor));
-                selectedEl.style.setProperty('--hl-ui-rgb', this.toRgbTupleString(highlightColor));if (!selectedHighlight.isNativeComment) {
-                                        selectedEl.style.boxShadow = `0 0 0 1.5px ${highlightColor}, var(--shadow-s)`;
-                                    }
+                                    selectedEl.style.setProperty('--hl-ui-rgb', rgb);
+                                    selectedEl.style.setProperty('--text-highlight-bg-rgb', rgb);
+                                    selectedEl.classList.add('highlight-selected');
                                 }
                             }
                         }
                     }
-                });
-            },
-            onHighlightClick: (highlight, event) => {
+                    });
+                },
+                onHighlightClick: (highlight, event) => {
                 
     // Reading-mode robust hop: switch to Source, focus by offsets, then back to Preview
     (async () => {
@@ -2496,6 +2508,23 @@ private getUiColorFromDoc(hex: string): string {
         if (foundUi) return this.normalizeColor6(foundUi.ui || hex);
         return this.normalizeColor6(hex);
     }
+
+    // Ensure every visible card has its UI color CSS variables set
+    private applyUiColorToAllCards(): void {
+        if (!this.containerEl) return;
+        const nodes = Array.from(this.containerEl.querySelectorAll<HTMLElement>('[data-highlight-id]'));
+        for (const el of nodes) {
+            const id = el.getAttribute('data-highlight-id');
+            if (!id) continue;
+            const h = this.getHighlightById(id);
+            if (!h) continue;
+            const docColor = h.color || this.plugin.settings.highlightColor;
+            const uiHex = this.getUiColorFromDoc(docColor);
+            const rgb = this.toRgbTupleString(uiHex);
+            el.style.setProperty('--hl-ui-rgb', rgb);
+            el.style.setProperty('--text-highlight-bg-rgb', rgb);
+        }
+    }
 private renderGroupedHighlights(highlights: Highlight[], searchTerm?: string, showFilename: boolean = false) {
         const groups = new Map<string, Highlight[]>();
         const groupColors = new Map<string, string>(); // Track the actual hex color for each group
@@ -2707,7 +2736,10 @@ private renderGroupedHighlights(highlights: Highlight[], searchTerm?: string, sh
                 this.createHighlightItem(this.listContainerEl, highlight, searchTerm, showFilename);
             });
         });
-    }
+    
+        // ensure UI color variables are applied to all cards
+        this.applyUiColorToAllCards();
+}
 
     private updateCommentsToggleIcon(button: HTMLElement) {
         button.empty();
