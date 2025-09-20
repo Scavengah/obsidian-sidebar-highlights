@@ -579,13 +579,15 @@ export class HighlightRenderer {
         
         const hoverColorPicker = item.createDiv({ cls: 'hover-color-picker' });
         const colorOptionsContainer = hoverColorPicker.createDiv({ cls: 'hover-color-options' });
-        const colors = [
+        const baseColors = [
             this.plugin.settings.customColors.yellow,
             this.plugin.settings.customColors.red,
             this.plugin.settings.customColors.teal,
             this.plugin.settings.customColors.blue,
             this.plugin.settings.customColors.green
         ];
+        const extras = (this.plugin.settings.extraColors || []).map(c => c.hex).filter(Boolean);
+        const colors = [...baseColors, ...extras];
         
         colors.forEach((color, index) => {
             const colorOption = colorOptionsContainer.createDiv({

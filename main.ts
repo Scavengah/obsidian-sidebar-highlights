@@ -64,6 +64,7 @@ export interface CommentPluginSettings {
         blue: string;
         green: string;
     };
+    extraColors: Array<{ hex: string; name: string }>;
 }
 
 const DEFAULT_SETTINGS: CommentPluginSettings = {
@@ -327,8 +328,22 @@ export default class HighlightCommentsPlugin extends Plugin {
         
         // Apply new theme class
         const themeClass = this.getHighlightThemeClass(this.settings.highlightColor);
-        document.body.classList.add(themeClass);
-    }
+        
+        const _defaultsHC = [
+            this.settings.customColors.yellow,
+            this.settings.customColors.red,
+            this.settings.customColors.teal,
+            this.settings.customColors.blue,
+            this.settings.customColors.green,
+        ];
+        if (_defaultsHC.includes(this.settings.highlightColor)) {
+            document.body.classList.add(themeClass);
+            document.body.style.removeProperty('--theme-highlight-color');
+        } else {
+            document.body.classList.add('theme-highlight-custom');
+            document.body.style.setProperty('--theme-highlight-color', this.settings.highlightColor);
+        }
+        }
 
     private removeHighlightTheme() {
         const themeClasses = [
@@ -337,12 +352,13 @@ export default class HighlightCommentsPlugin extends Plugin {
             'theme-highlight-red',
             'theme-highlight-teal',
             'theme-highlight-blue',
-            'theme-highlight-green'
+            'theme-highlight-green', 'theme-highlight-custom'
         ];
         
         themeClasses.forEach(className => {
             document.body.classList.remove(className);
         });
+            document.body.style.removeProperty('--theme-highlight-color');
     }
 
     private getHighlightThemeClass(color: string): string {
@@ -388,7 +404,9 @@ export default class HighlightCommentsPlugin extends Plugin {
             body.theme-highlight-red .cm-highlight { background-color: ${this.settings.customColors.red}66 !important; }
             body.theme-highlight-teal .cm-highlight { background-color: ${this.settings.customColors.teal}66 !important; }
             body.theme-highlight-blue .cm-highlight { background-color: ${this.settings.customColors.blue}66 !important; }
-            body.theme-highlight-green .cm-highlight { background-color: ${this.settings.customColors.green}66 !important; }
+            body.theme-highlight-green .cm-highlight { background-color: ${this.settings.customColors.green}
+            body.theme-highlight-custom .cm-highlight { background-color: var(--theme-highlight-color)66 !important; }
+66 !important; }
             
             /* Dynamic highlight card border colors */
             .highlight-item-card.highlight-color-yellow { border-left-color: ${this.settings.customColors.yellow} !important; }
@@ -2089,7 +2107,66 @@ class HighlightSettingTab extends PluginSettingTab {
                     this.plugin.refreshSidebar();
                 }));
 
-        // COMMENTS SECTION
+        
+        // Additional colors (HC)
+        new Setting(containerEl).setHeading().setName('Additional colors');
+
+        // Container for dynamic rows
+        const extrasContainerHC = containerEl.createDiv({ cls: 'extra-colors-section' });
+
+        const renderExtrasHC = () => {
+            extrasContainerHC.empty();
+            const arr = this.plugin.settings.extraColors || [];
+            arr.forEach((c, idx) => {
+                const row = new Setting(extrasContainerHC);
+                row.settingEl.classList.add('extra-color-setting');
+                row
+                    .setName(`Extra color ${idx + 1}: ${(c.hex || '#cccccc').toUpperCase()}`)
+                    .setDesc('Name is optional; used in Group by Color.')
+                    .addColorPicker(p => {
+                        p.setValue(c.hex || '#cccccc').onChange(async (v) => {
+                            this.plugin.settings.extraColors[idx].hex = v;
+                            await this.plugin.saveSettings();
+                            row.setName(`Extra color ${idx + 1}: ${v.toUpperCase()}`);
+                            this.plugin.refreshSidebar();
+                        });
+                    })
+                    .addText(t => {
+                        t.setPlaceholder('e.g., "Important", "Research"')
+                         .setValue(c.name || '')
+                         .onChange(async (v) => {
+                            this.plugin.settings.extraColors[idx].name = v;
+                            await this.plugin.saveSettings();
+                            this.plugin.refreshSidebar();
+                         });
+                    })
+                    .addExtraButton(btn => {
+                        btn.setIcon('trash')
+                           .setTooltip('Remove this color')
+                           .onClick(async () => {
+                               this.plugin.settings.extraColors.splice(idx, 1);
+                               await this.plugin.saveSettings();
+                               renderExtrasHC();
+                               this.plugin.refreshSidebar();
+                           });
+                    });
+            });
+        };
+
+        renderExtrasHC();
+
+        new Setting(containerEl)
+            .addButton(b => {
+                b.setButtonText('Add color')
+                 .onClick(async () => {
+                    this.plugin.settings.extraColors = this.plugin.settings.extraColors || [];
+                    this.plugin.settings.extraColors.push({ hex: '#cccccc', name: '' });
+                    await this.plugin.saveSettings();
+                    renderExtrasHC();
+                 });
+            });
+
+// COMMENTS SECTION
         new Setting(containerEl).setHeading().setName('Comments');
 
         new Setting(containerEl)

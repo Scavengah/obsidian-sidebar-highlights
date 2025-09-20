@@ -2428,6 +2428,10 @@ export class HighlightsSidebarView extends ItemView {
             return customNames.green.trim();
         }
         
+        // Check user-defined extras
+        const extrasHC = this.plugin.settings.extraColors || [];
+        const foundHC = extrasHC.find((c: any) => (c.hex || '').toLowerCase() === (hex || '').toLowerCase());
+        if (foundHC && foundHC.name && foundHC.name.trim()) { return foundHC.name.trim(); }
         // Fall back to hex code
         return hex;
     }
