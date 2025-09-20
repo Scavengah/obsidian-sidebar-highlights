@@ -370,10 +370,30 @@ export class HighlightsSidebarView extends ItemView {
         this.contentAreaEl = this.contentEl.createDiv({ cls: 'highlights-list-area' });
         this.listContainerEl = this.contentAreaEl.createDiv({ cls: 'highlights-list' });
 
-        this.renderContent();
+        
+        // Observe DOM additions to keep UI colors applied
+        try {
+            this.uiVarObserver?.disconnect();
+            this.uiVarObserver = new MutationObserver((mutations) => {
+                for (const m of mutations) {
+                    m.addedNodes?.forEach((n) => {
+                        if (!(n instanceof HTMLElement)) return;
+                        if (n.hasAttribute && n.hasAttribute('data-highlight-id')) {
+                            this.applyUiColorToElement(n as HTMLElement);
+                        }
+                        n.querySelectorAll?.('[data-highlight-id]')?.forEach((el) => {
+                            this.applyUiColorToElement(el as HTMLElement);
+                        });
+                    });
+                }
+            });
+            this.uiVarObserver.observe(this.listContainerEl, { childList: true, subtree: true });
+        } catch {}
+    this.renderContent();
     }
 
     async onClose() {
+        try { this.uiVarObserver?.disconnect(); } catch {}
         // Clean up dropdown manager
         this.dropdownManager.cleanup();
         
@@ -1564,7 +1584,11 @@ export class HighlightsSidebarView extends ItemView {
         };
 
         return this.highlightRenderer.createHighlightItem(container, highlight, options);
-    }
+    
+        // Ensure the card carries its UI color variables
+        const last = container.lastElementChild as HTMLElement | null;
+        if (last) this.applyUiColorToElement(last, highlight);
+}
 
     private rerenderCurrentView(): void {
         if (this.viewMode === 'collections' && this.currentCollectionId) {
@@ -2510,6 +2534,19 @@ private getUiColorFromDoc(hex: string): string {
     }
 
     // Ensure every visible card has its UI color CSS variables set
+    
+    private applyUiColorToElement(el: HTMLElement, h?: Highlight): void {
+        if (!el) return;
+        try {
+            const id = el.getAttribute('data-highlight-id');
+            const src = h || (id ? this.getHighlightById(id) : null);
+            if (!src) return;
+            const docColor = src.color || this.plugin.settings.highlightColor;
+            const uiHex = this.getUiColorFromDoc(docColor);
+            const rgb = this.toRgbTupleString(uiHex);
+            this.applyUiColorToElement(el); } catch {}
+    }
+
     private applyUiColorToAllCards(): void {
         if (!this.containerEl) return;
         const nodes = Array.from(this.containerEl.querySelectorAll<HTMLElement>('[data-highlight-id]'));
