@@ -35,6 +35,7 @@ class MarkPaletteModal extends SuggestModal<{ name: string; ui: string; doc: str
 import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf, debounce , SuggestModal} from 'obsidian';
 import { HighlightsSidebarView } from './src/views/sidebar-view';
 import { InlineFootnoteManager } from './src/managers/inline-footnote-manager';
+import { registerHoverCommentTooltip } from './src/managers/hover-comment-tooltip';
 import { ExcludedFilesModal } from './src/modals/excluded-files-modal';
 
 export interface Highlight {
@@ -229,6 +230,24 @@ private _applyMarkToSelection(editor: Editor, item: { name: string; ui: string; 
 
 async onload() {
         await this.loadSettings();
+
+// --- Insert hover-comment-tooltip anchor ---
+this.addCommand({
+    id: 'insert-hover-comment-anchor',
+    name: 'Insert Comment Anchor (<span class="comment-anchor">…</span>)',
+    editorCallback: (editor: Editor) => {
+        const snippet = `<span class="comment-anchor"><span class="comment-text">CommentPlaceHolder</span></span>`;
+        editor.replaceSelection(snippet);
+    }
+});
+
+// --- Enable integrated Hover Comment Tooltip behavior ---
+registerHoverCommentTooltip(this);
+
+
+// --- Enable integrated Hover Comment Tooltip behavior ---
+registerHoverCommentTooltip(this);
+
 
 // --- Register mark-tag commands ---
 this.addCommand({
@@ -631,6 +650,24 @@ this.addCommand({
     async reloadAllSettings() {
         // Reload settings from disk to get latest external changes
         await this.loadSettings();
+
+// --- Insert hover-comment-tooltip anchor ---
+this.addCommand({
+    id: 'insert-hover-comment-anchor',
+    name: 'Insert Comment Anchor (<span class="comment-anchor">…</span>)',
+    editorCallback: (editor: Editor) => {
+        const snippet = `<span class="comment-anchor"><span class="comment-text">CommentPlaceHolder</span></span>`;
+        editor.replaceSelection(snippet);
+    }
+});
+
+// --- Enable integrated Hover Comment Tooltip behavior ---
+registerHoverCommentTooltip(this);
+
+
+// --- Enable integrated Hover Comment Tooltip behavior ---
+registerHoverCommentTooltip(this);
+
 
 // --- Register mark-tag commands ---
 this.addCommand({
