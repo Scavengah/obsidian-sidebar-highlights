@@ -1,0 +1,2 @@
+wishlist:
+- highlight to sidebar card nav
