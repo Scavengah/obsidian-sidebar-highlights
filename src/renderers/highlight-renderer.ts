@@ -277,11 +277,18 @@ export class HighlightRenderer {
             
             // Create a separate timestamp container div
             const timestampContainer = infoLineContainer.createDiv({ cls: 'highlight-timestamp-container' });
+            // Color name label (from palette)
+            const label = this.resolveLabelFromHighlight(highlight);
+            if (label) {
+                const chip = timestampContainer.createDiv({ cls: 'highlight-color-badge', text: label });
+            }
             const timestampEl = timestampContainer.createDiv({
                 cls: 'highlight-timestamp-info',
                 text: timeString,
                 attr: { title: `Created: ${timeString}` }
             });
+            // Also expose as data attribute on the card for CSS ::before badges
+            try { const host = infoLineContainer?.parentElement?.parentElement as HTMLElement; if (host && label) host.setAttribute('data-color-name', label); } catch(_) {}
         }
     }
 
@@ -628,4 +635,58 @@ export class HighlightRenderer {
         });
         hoverColorPicker.addEventListener('mouseleave', hideColorPicker);
     }
+
+    // === Helpers for label lookup ===
+    private _slugifyName(name: string): string {
+        return (name || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    }
+    private _normalizeHex(hex?: string): string {
+        if (!hex) return '';
+        let h = (hex.trim().toLowerCase());
+        if (h.startsWith('rgba') || h.startsWith('rgb')) {
+            const nums = h.replace(/rgba?\(|\)/g, '').split(',').map(x => parseFloat(x.trim()));
+            const toHex = (n:number) => ('0' + Math.max(0, Math.min(255, Math.round(n))).toString(16)).slice(-2);
+            return '#' + toHex(nums[0]||0) + toHex(nums[1]||0) + toHex(nums[2]||0);
+        }
+        if (h.startsWith('#')) h = h.slice(1);
+        if (h.length === 8) h = h.slice(0,6);
+        if (h.length === 3) h = h.split('').map(c => c + c).join('');
+        if (h.length < 6) h = (h + '000000').slice(0,6);
+        return '#' + h;
+    }
+    private resolveLabelFromHighlight(highlight: Highlight): string {
+        const s: any = this.plugin.settings;
+        // Build slug->name from base + extras
+        const mapSlugToName: Record<string, string> = {};
+        const base = [
+            {name: s.customColorNames?.yellow, doc: s.customColorsDoc?.yellow },
+            {name: s.customColorNames?.red,    doc: s.customColorsDoc?.red },
+            {name: s.customColorNames?.teal,   doc: s.customColorsDoc?.teal },
+            {name: s.customColorNames?.blue,   doc: s.customColorsDoc?.blue },
+            {name: s.customColorNames?.green,  doc: s.customColorsDoc?.green },
+        ];
+        for (const b of base) {
+            if (b?.name) mapSlugToName[this._slugifyName(b.name)] = b.name;
+        }
+        for (const c of (s.extraColors || [])) {
+            if (c?.name) mapSlugToName[this._slugifyName(c.name)] = c.name;
+        }
+        // 1) Preferred: use markClassSlug saved during parsing
+        const slug = (highlight as any).markClassSlug;
+        if (slug && mapSlugToName[slug]) return mapSlugToName[slug];
+        // 2) Fallback: match by document color
+        const target = this._normalizeHex((highlight as any).color || '');
+        if (target) {
+            // Check base doc colors
+            for (const b of base) {
+                if (this._normalizeHex(b?.doc||'') === target && b?.name) return b.name;
+            }
+            // Extra colors use 'doc' as well
+            for (const c of (s.extraColors || [])) {
+                if (this._normalizeHex(c?.doc||'') === target && c?.name) return c.name;
+            }
+        }
+        return '';
+    }
+    
 }

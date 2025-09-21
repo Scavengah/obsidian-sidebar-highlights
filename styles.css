@@ -1755,3 +1755,32 @@ mark[class^="sbh-"] { padding: 0 0.15em; border-radius: 3px; }
 .workspace-leaf-content[data-type="highlights-sidebar"] .highlight-item-card.highlight-selected {
   box-shadow: 0 0 0 2px rgba(var(--hl-ui-rgb, 255, 208, 0), 0.95), var(--shadow-m) !important;
 }
+
+/* === Inline palette label + non-truncated date === */
+.highlight-info-line { 
+  display: grid; 
+  grid-template-columns: 1fr auto; 
+  align-items: center; 
+  gap: 8px;
+}
+.highlight-timestamp-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  max-width: none !important;
+}
+.highlight-timestamp-info {
+  white-space: nowrap;
+  max-width: none !important;
+  overflow: visible !important;
+}
+.highlight-color-badge{
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1;
+}

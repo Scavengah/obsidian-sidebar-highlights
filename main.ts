@@ -52,6 +52,7 @@ export interface Highlight {
     createdAt?: number; // Timestamp when highlight was created
     isNativeComment?: boolean; // True if this is a native comment (%% %) rather than highlight (== ==)
     type?: 'highlight' | 'comment' | 'html'; // Type of highlight for proper identification
+    markClassSlug?: string; // sbh-<slug> captured from <mark class>
 }
 
 export interface Collection {
@@ -1360,6 +1361,8 @@ this.addCommand({
                 const styleAttr = openTag.match(/style\s*=\s*["']([^"']+)["']/i)?.[1] ?? "";
                 const bg = styleAttr.match(/background(?:-color)?:\s*([^;]+)/i)?.[1]?.trim();
                 const markColor = bg || '#ffff00';
+                const classAttr = openTag.match(/class\s*=\s*["']([^"']+)["']/i)?.[1] ?? "";
+                const sbhSlug = (classAttr.split(/\s+/).find(c => /^sbh-/i.test(c)) || '').replace(/^sbh-/i, '').toLowerCase();
                 // Create a modified match array with the text content
                 if (/<mark\b/i.test(match[1])) {
                 // Nested <mark> inside: skip base emission; nested parser will add proper cards
@@ -1371,7 +1374,7 @@ this.addCommand({
                 tpl.innerHTML = match[1];
                 const plain = (tpl.content.textContent || '').replace(/\s+/g, ' ').trim();
                 modifiedMatch[1] = plain;
-                allMatches.push({match: modifiedMatch, type: 'html', color: markColor});
+                allMatches.push({match: modifiedMatch, type: 'html', color: markColor, cls: sbhSlug});
             }
         }
         
@@ -1406,8 +1409,11 @@ this.addCommand({
                 if (!this.isInsideCodeBlock(s, e, codeBlockRanges)) {
                     if (!existing.has(key(s,e))) {
                         const syn: any = [] as any;
+                        const openMark = (content.slice(s,e).match(/<mark\b[^>]*>/i)?.[0] || '');
+                        const classAttr = openMark.match(/class\s*=\s*["']([^"']+)["']/i)?.[1] ?? "";
+                        const sbhSlug = (classAttr.split(/\s+/).find(c => /^sbh-/i.test(c)) || '').replace(/^sbh-/i,'').toLowerCase();
                         syn.index = s; syn[0] = content.slice(s,e); syn[1] = node.text;
-                        allMatches.push({ match: syn as RegExpExecArray, type: 'html', color: node.color ?? '#ffff00'});
+                        allMatches.push({ match: syn as RegExpExecArray, type: 'html', color: node.color ?? '#ffff00', cls: sbhSlug});
                         existing.add(key(s,e));
                     }
                     if (node.children && node.children.length) {
@@ -1415,8 +1421,11 @@ this.addCommand({
                         const cs = c.start, ce = c.end;
                         if (!this.isInsideCodeBlock(cs, ce, codeBlockRanges) && !existing.has(key(cs,ce))) {
                             const synC: any = [] as any;
+                            const openMarkC = (content.slice(cs,ce).match(/<mark\b[^>]*>/i)?.[0] || '');
+                            const classAttrC = openMarkC.match(/class\s*=\s*["']([^"']+)["']/i)?.[1] ?? "";
+                            const sbhSlugC = (classAttrC.split(/\s+/).find(c => /^sbh-/i.test(c)) || '').replace(/^sbh-/i,'').toLowerCase();
                             synC.index = cs; synC[0] = content.slice(cs,ce); synC[1] = c.text;
-                            allMatches.push({ match: synC as RegExpExecArray, type: 'html', color: c.color ?? '#ffff00'});
+                            allMatches.push({ match: synC as RegExpExecArray, type: 'html', color: c.color ?? '#ffff00', cls: sbhSlugC});
                             existing.add(key(cs,ce));
                         }
                     }
@@ -1425,7 +1434,7 @@ this.addCommand({
         }).call(this);
 
 
-        allMatches.forEach(({match, type, color}) => {
+        allMatches.forEach(({match, type, color, cls}) => {
             const [, highlightText] = match;
             
             // Skip empty or whitespace-only highlights
@@ -1544,7 +1553,8 @@ if (existingHighlight) {
                     // Preserve existing createdAt timestamp if it exists
                     createdAt: existingHighlight.createdAt || Date.now(),
                     // Store the type for proper identification
-                    type: type
+                    type: type,
+                    markClassSlug: (cls || (type==='html' ? cls : undefined))
                 });
             } else {
                 // For new highlights, use file modification time to preserve historical context
@@ -1565,7 +1575,8 @@ if (existingHighlight) {
                     // Set color for HTML highlights
                     color: type === 'html' ? color : undefined,
                     // Store the type for proper identification
-                    type: type
+                    type: type,
+                    markClassSlug: cls
                 });
             }
         });
