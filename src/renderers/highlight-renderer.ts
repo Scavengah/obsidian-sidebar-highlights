@@ -71,6 +71,9 @@ export class HighlightRenderer {
         if (highlight.isNativeComment) {
             // Native comments get special styling
             item.classList.add('highlight-native-comment');
+            // Ensure neutral UI color so they never inherit a highlight hue
+            item.style.setProperty('--hl-ui-rgb', '128,128,128');
+            item.style.setProperty('--text-highlight-bg-rgb', '128,128,128');
         } else {
             // Sidebar card origin tag for real HTML <mark> highlights
             if (highlight.type === 'html') {

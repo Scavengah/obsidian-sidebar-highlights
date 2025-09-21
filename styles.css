@@ -32,7 +32,7 @@
 /* Default highlight color */
 body .cm-highlight,
 body.theme-highlight-default .cm-highlight {
-    background-color: rgb(var(--text-highlight-bg-rgb));
+    background-color: rgb(var(--text-highlight-bg-rgb, 128,128,128));
 }
 
 /* Yellow highlight theme */
@@ -82,12 +82,12 @@ body.theme-highlight-green .cm-highlight {
 }
 
 .highlight-item-card.highlight-color-default {
-    border-left-color: rgb(var(--text-highlight-bg-rgb));
+    border-left-color: rgb(var(--text-highlight-bg-rgb, 128,128,128));
 }
 
 /* Support for custom colors via CSS custom properties */
 .highlight-item-card.highlight-color-custom {
-    border-left-color: var(--highlight-color, rgb(var(--text-highlight-bg-rgb)));
+    border-left-color: var(--highlight-color, rgb(var(--text-highlight-bg-rgb, 128,128,128)));
 }
 
 /* Override default view-content padding for highlights sidebar */
@@ -492,7 +492,7 @@ body.theme-highlight-green .cm-highlight {
 .highlight-item-card {
     background: var(--background-secondary); 
     border: none; 
-    border-left: 5px solid rgb(var(--text-highlight-bg-rgb)); /* Default color, overridden by color classes */
+    border-left: 5px solid rgb(var(--text-highlight-bg-rgb, 128,128,128)); /* Default color, overridden by color classes */
     border-radius: 6px; 
     padding: 0; 
     margin-bottom: 10px; 
@@ -508,7 +508,7 @@ body.theme-highlight-green .cm-highlight {
 }
 
 .highlight-item-card.highlight-selected {
-    box-shadow: 0 0 0 1.5px rgb(var(--text-highlight-bg-rgb)), var(--shadow-s); /* Default selection color, overridden by color classes */
+    box-shadow: 0 0 0 1.5px rgb(var(--text-highlight-bg-rgb, 128,128,128)), var(--shadow-s); /* Default selection color, overridden by color classes */
 }
 
 /* Color-specific selection box-shadows */
@@ -534,7 +534,7 @@ body.theme-highlight-green .cm-highlight {
 
 /* Support for custom colors in selection state */
 .highlight-item-card.highlight-color-custom.highlight-selected {
-    box-shadow: 0 0 0 1.5px var(--highlight-color, rgb(var(--text-highlight-bg-rgb))), var(--shadow-s);
+    box-shadow: 0 0 0 1.5px var(--highlight-color, rgb(var(--text-highlight-bg-rgb, 128,128,128))), var(--shadow-s);
 }
 
 /* Native comment highlight card styling - similar to regular highlights but with muted appearance */
@@ -1612,24 +1612,24 @@ body.theme-highlight-green .cm-highlight {
   /* Default + custom colors */
   .workspace-leaf-content[data-type="highlights-sidebar"] 
   .highlight-item-card.highlight-origin-html.highlight-color-default {
-    border-left-color: color(from rgb(var(--text-highlight-bg-rgb)) oklch calc(l + var(--sidebar-oklch-delta)) c h);
+    border-left-color: color(from rgb(var(--text-highlight-bg-rgb, 128,128,128)) oklch calc(l + var(--sidebar-oklch-delta)) c h);
   }
   .workspace-leaf-content[data-type="highlights-sidebar"] 
   .highlight-item-card.highlight-origin-html.highlight-color-custom {
-    border-left-color: color(from var(--highlight-color, rgb(var(--text-highlight-bg-rgb))) oklch calc(l + var(--sidebar-oklch-delta)) c h);
+    border-left-color: color(from var(--highlight-color, rgb(var(--text-highlight-bg-rgb, 128,128,128))) oklch calc(l + var(--sidebar-oklch-delta)) c h);
   }
   /* Selection/active ring — keep brightened */
   .workspace-leaf-content[data-type="highlights-sidebar"] 
   .highlight-item-card.highlight-origin-html.highlight-color-default.highlight-selected,
   .workspace-leaf-content[data-type="highlights-sidebar"] 
   .highlight-item-card.highlight-origin-html.highlight-color-default:active {
-    box-shadow: 0 0 0 1.5px color(from rgb(var(--text-highlight-bg-rgb)) oklch calc(l + var(--sidebar-oklch-delta)) c h), var(--shadow-s) !important;
+    box-shadow: 0 0 0 1.5px color(from rgb(var(--text-highlight-bg-rgb, 128,128,128)) oklch calc(l + var(--sidebar-oklch-delta)) c h), var(--shadow-s) !important;
   }
   .workspace-leaf-content[data-type="highlights-sidebar"] 
   .highlight-item-card.highlight-origin-html.highlight-color-custom.highlight-selected,
   .workspace-leaf-content[data-type="highlights-sidebar"] 
   .highlight-item-card.highlight-origin-html.highlight-color-custom:active {
-    box-shadow: 0 0 0 1.5px color(from var(--highlight-color, rgb(var(--text-highlight-bg-rgb))) oklch calc(l + var(--sidebar-oklch-delta)) c h), var(--shadow-s) !important;
+    box-shadow: 0 0 0 1.5px color(from var(--highlight-color, rgb(var(--text-highlight-bg-rgb, 128,128,128))) oklch calc(l + var(--sidebar-oklch-delta)) c h), var(--shadow-s) !important;
   }
 
   /* Preset palette borders (subtle brighten) */
@@ -1657,24 +1657,24 @@ body.theme-highlight-green .cm-highlight {
   /* Default + custom colors */
   .workspace-leaf-content[data-type="highlights-sidebar"] 
   .highlight-item-card.highlight-origin-html.highlight-color-default {
-    border-left-color: color-mix(in srgb, rgb(var(--text-highlight-bg-rgb)) calc(100% - var(--sidebar-mark-brighten)), var(--sidebar-brighten-target) var(--sidebar-mark-brighten));
+    border-left-color: color-mix(in srgb, rgb(var(--text-highlight-bg-rgb, 128,128,128)) calc(100% - var(--sidebar-mark-brighten)), var(--sidebar-brighten-target) var(--sidebar-mark-brighten));
   }
   .workspace-leaf-content[data-type="highlights-sidebar"] 
   .highlight-item-card.highlight-origin-html.highlight-color-custom {
-    border-left-color: color-mix(in srgb, var(--highlight-color, rgb(var(--text-highlight-bg-rgb))) calc(100% - var(--sidebar-mark-brighten)), var(--sidebar-brighten-target) var(--sidebar-mark-brighten));
+    border-left-color: color-mix(in srgb, var(--highlight-color, rgb(var(--text-highlight-bg-rgb, 128,128,128))) calc(100% - var(--sidebar-mark-brighten)), var(--sidebar-brighten-target) var(--sidebar-mark-brighten));
   }
   /* Selection/active ring — keep brightened */
   .workspace-leaf-content[data-type="highlights-sidebar"] 
   .highlight-item-card.highlight-origin-html.highlight-color-default.highlight-selected,
   .workspace-leaf-content[data-type="highlights-sidebar"] 
   .highlight-item-card.highlight-origin-html.highlight-color-default:active {
-    box-shadow: 0 0 0 1.5px color-mix(in srgb, rgb(var(--text-highlight-bg-rgb)) calc(100% - var(--sidebar-mark-brighten)), var(--sidebar-brighten-target) var(--sidebar-mark-brighten)), var(--shadow-s) !important;
+    box-shadow: 0 0 0 1.5px color-mix(in srgb, rgb(var(--text-highlight-bg-rgb, 128,128,128)) calc(100% - var(--sidebar-mark-brighten)), var(--sidebar-brighten-target) var(--sidebar-mark-brighten)), var(--shadow-s) !important;
   }
   .workspace-leaf-content[data-type="highlights-sidebar"] 
   .highlight-item-card.highlight-origin-html.highlight-color-custom.highlight-selected,
   .workspace-leaf-content[data-type="highlights-sidebar"] 
   .highlight-item-card.highlight-origin-html.highlight-color-custom:active {
-    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--highlight-color, rgb(var(--text-highlight-bg-rgb))) calc(100% - var(--sidebar-mark-brighten)), var(--sidebar-brighten-target) var(--sidebar-mark-brighten)), var(--shadow-s) !important;
+    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--highlight-color, rgb(var(--text-highlight-bg-rgb, 128,128,128))) calc(100% - var(--sidebar-mark-brighten)), var(--sidebar-brighten-target) var(--sidebar-mark-brighten)), var(--shadow-s) !important;
   }
 
   /* Preset palette borders */

@@ -958,6 +958,9 @@ export class HighlightsSidebarView extends ItemView {
         pageHighlights.forEach(highlight => {
             this.createHighlightItem(this.listContainerEl, highlight, searchTerm, true);
         });
+    
+        // After rendering items, ensure color variables are set per card
+        this.applyUiColorToAllCards();
     }
     
     /**
@@ -1613,6 +1616,8 @@ onFileNameClick: (filePath, event) => {
         } else {
             this.renderFilteredList();
         }
+        // Reapply per-card UI color variables after rerender
+        this.applyUiColorToAllCards();
     }
 
 
