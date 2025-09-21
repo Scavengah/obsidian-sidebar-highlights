@@ -17,6 +17,7 @@ export interface HighlightRenderOptions {
     onCommentClick?: (highlight: Highlight, commentIndex: number, event?: MouseEvent) => void;
     onTagClick?: (tag: string) => void;
     onFileNameClick?: (filePath: string, event: MouseEvent) => void;
+    onColorLabelClick?: (label: string, colorHex: string, slug: string, event: MouseEvent) => void;
 }
 
 export class HighlightRenderer {
@@ -277,18 +278,19 @@ export class HighlightRenderer {
             
             // Create a separate timestamp container div
             const timestampContainer = infoLineContainer.createDiv({ cls: 'highlight-timestamp-container' });
-            // Color name label (from palette)
             const label = this.resolveLabelFromHighlight(highlight);
             if (label) {
-                const chip = timestampContainer.createDiv({ cls: 'highlight-color-badge', text: label });
+                const slug = this._slugifyName(label);
+                const chip = timestampContainer.createEl('span', { cls: 'highlight-color-label', text: label, attr: { role: 'link', tabindex: '0' } });
+                const handle = (ev: any) => { ev.stopPropagation(); options.onColorLabelClick?.(label, (highlight.color || this.plugin.settings.highlightColor), slug, ev); };
+                chip.addEventListener('click', handle);
+                chip.addEventListener('keydown', (e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') handle(e); });
             }
             const timestampEl = timestampContainer.createDiv({
                 cls: 'highlight-timestamp-info',
                 text: timeString,
                 attr: { title: `Created: ${timeString}` }
             });
-            // Also expose as data attribute on the card for CSS ::before badges
-            try { const host = infoLineContainer?.parentElement?.parentElement as HTMLElement; if (host && label) host.setAttribute('data-color-name', label); } catch(_) {}
         }
     }
 
@@ -636,56 +638,22 @@ export class HighlightRenderer {
         hoverColorPicker.addEventListener('mouseleave', hideColorPicker);
     }
 
-    // === Helpers for label lookup ===
     private _slugifyName(name: string): string {
         return (name || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
     }
-    private _normalizeHex(hex?: string): string {
-        if (!hex) return '';
-        let h = (hex.trim().toLowerCase());
-        if (h.startsWith('rgba') || h.startsWith('rgb')) {
-            const nums = h.replace(/rgba?\(|\)/g, '').split(',').map(x => parseFloat(x.trim()));
-            const toHex = (n:number) => ('0' + Math.max(0, Math.min(255, Math.round(n))).toString(16)).slice(-2);
-            return '#' + toHex(nums[0]||0) + toHex(nums[1]||0) + toHex(nums[2]||0);
-        }
-        if (h.startsWith('#')) h = h.slice(1);
-        if (h.length === 8) h = h.slice(0,6);
-        if (h.length === 3) h = h.split('').map(c => c + c).join('');
-        if (h.length < 6) h = (h + '000000').slice(0,6);
-        return '#' + h;
-    }
     private resolveLabelFromHighlight(highlight: Highlight): string {
         const s: any = this.plugin.settings;
-        // Build slug->name from base + extras
-        const mapSlugToName: Record<string, string> = {};
-        const base = [
-            {name: s.customColorNames?.yellow, doc: s.customColorsDoc?.yellow },
-            {name: s.customColorNames?.red,    doc: s.customColorsDoc?.red },
-            {name: s.customColorNames?.teal,   doc: s.customColorsDoc?.teal },
-            {name: s.customColorNames?.blue,   doc: s.customColorsDoc?.blue },
-            {name: s.customColorNames?.green,  doc: s.customColorsDoc?.green },
-        ];
-        for (const b of base) {
-            if (b?.name) mapSlugToName[this._slugifyName(b.name)] = b.name;
-        }
+        const slug = (highlight as any).markClassSlug || '';
+        const map: Record<string,string> = {};
+        if (s.customColorNames?.yellow) map[this._slugifyName(s.customColorNames.yellow)] = s.customColorNames.yellow;
+        if (s.customColorNames?.red)    map[this._slugifyName(s.customColorNames.red)]    = s.customColorNames.red;
+        if (s.customColorNames?.teal)   map[this._slugifyName(s.customColorNames.teal)]   = s.customColorNames.teal;
+        if (s.customColorNames?.blue)   map[this._slugifyName(s.customColorNames.blue)]   = s.customColorNames.blue;
+        if (s.customColorNames?.green)  map[this._slugifyName(s.customColorNames.green)]  = s.customColorNames.green;
         for (const c of (s.extraColors || [])) {
-            if (c?.name) mapSlugToName[this._slugifyName(c.name)] = c.name;
+            if (c?.name) map[this._slugifyName(c.name)] = c.name;
         }
-        // 1) Preferred: use markClassSlug saved during parsing
-        const slug = (highlight as any).markClassSlug;
-        if (slug && mapSlugToName[slug]) return mapSlugToName[slug];
-        // 2) Fallback: match by document color
-        const target = this._normalizeHex((highlight as any).color || '');
-        if (target) {
-            // Check base doc colors
-            for (const b of base) {
-                if (this._normalizeHex(b?.doc||'') === target && b?.name) return b.name;
-            }
-            // Extra colors use 'doc' as well
-            for (const c of (s.extraColors || [])) {
-                if (this._normalizeHex(c?.doc||'') === target && c?.name) return c.name;
-            }
-        }
+        if (slug && map[slug]) return map[slug];
         return '';
     }
     

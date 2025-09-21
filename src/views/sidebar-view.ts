@@ -1576,7 +1576,24 @@ export class HighlightsSidebarView extends ItemView {
                 this.renderFilteredList();
                 this.showTagActive();
             },
-            onFileNameClick: (filePath, event) => {
+            onColorLabelClick: (label, colorHex, slug, event) => {
+                event?.stopPropagation?.();
+                this.groupingMode = 'color';
+                this.saveGroupingModeToSettings();
+                this.renderContent();
+                // after render, scroll to the matching color group header
+                requestAnimationFrame(() => {
+                    try {
+                        const headers = this.listContainerEl?.querySelectorAll('.highlight-group-header') || [] as any;
+                        for (const h of headers) {
+                            const labelEl = (h.querySelector('.collection-stats') ? h.firstChild : h) as HTMLElement;
+                            const name = (h?.textContent || '').trim();
+                            if (name && name.includes(label)) { h.scrollIntoView({ behavior: 'smooth', block: 'start' }); break; }
+                        }
+                    } catch {}
+                });
+            },
+onFileNameClick: (filePath, event) => {
                 // Set flag to preserve pagination when clicking filenames
                 this.isPreservingPagination = true;
                 this.plugin.app.workspace.openLinkText(filePath, filePath, Keymap.isModEvent(event));
