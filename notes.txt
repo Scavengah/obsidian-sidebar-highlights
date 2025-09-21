@@ -1,5 +1,6 @@
-- scroll fix
 - highlight to sidebar card nav
 - add more highlight color definitions
 - write color name on card
 - make create date visible
+
+- restructure, files and folders
