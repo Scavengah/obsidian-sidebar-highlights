@@ -1,2 +1,11 @@
 wishlist:
 - highlight to sidebar card nav
+
+To implement:
+- datetime stamp on comments
+- add comment on sidebar cards should be comment anchor instead of footnote comment
+- make text copy-able from sidebar cards
+- render callout formatting in sidebar cards
+- external links render raw in sidebar comments, see 445
+- comment categories, footnote, inline, comment anchor
+- footnote number prepended to sidebar comment
