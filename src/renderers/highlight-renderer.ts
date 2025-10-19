@@ -14,6 +14,8 @@ export interface HighlightRenderOptions {
     onColorChange?: (highlight: Highlight, color: string) => void;
     onHighlightClick?: (highlight: Highlight, event?: MouseEvent) => void;
     onAddComment?: (highlight: Highlight) => void;
+    onAddMarkComment?: (highlight: Highlight) => void;
+    onAddFootnoteComment?: (highlight: Highlight) => void;
     onCommentClick?: (highlight: Highlight, commentIndex: number, event?: MouseEvent) => void;
     onTagClick?: (tag: string) => void;
     onFileNameClick?: (filePath: string, event: MouseEvent) => void;
@@ -312,21 +314,10 @@ export class HighlightRenderer {
 
         if (validFootnoteContents.length > 0) {
             validFootnoteContents.forEach((content, index) => {
+                
                 const commentDiv = commentsContainer.createDiv({ cls: 'highlight-comment' });
-
-                // Subcomment body
                 const body = commentDiv.createDiv({ cls: 'highlight-comment-body' });
-                this.renderMarkdownToElement(body, content);
-
-                // Footer bar — reuse parent classes for identical style
-                const actions = commentDiv.createDiv({ cls: 'highlight-actions subcomment-actions' });
-                const infoContainer = actions.createDiv({ cls: 'highlight-info-container' });
-                const infoLineContainer = infoContainer.createDiv({ cls: 'highlight-info-line' });
-
-                // Keep left spacer for consistent spacing
-                infoLineContainer.createDiv({ cls: 'highlight-stats-section' });
-
-                // Right side timestamp
+                const line = body.createDiv({ cls: 'highlight-comment-line' });
                 if (options.showTimestamp) {
                     const millis = (highlight.commentTimestamps && (highlight.commentTimestamps as number[])[index] != null)
                         ? (highlight.commentTimestamps as number[])[index]
@@ -334,16 +325,11 @@ export class HighlightRenderer {
                     const tsText = options.dateFormat
                         ? moment(millis).format(options.dateFormat)
                         : moment(millis).format('YYYY-MM-DD HH:mm');
-
-                    const tsContainer = infoLineContainer.createDiv({ cls: 'highlight-timestamp-container' });
-                    tsContainer.createDiv({
-                        cls: 'highlight-timestamp-info',
-                        text: tsText,
-                        attr: { title: `Created: ${tsText}` }
-                    });
+                    line.createSpan({ cls: 'highlight-comment-datetime', text: tsText + ': ' });
                 }
-
-                // Click behavior
+                const commentTextEl = line.createDiv({ cls: 'highlight-comment-text' });
+                this.renderMarkdownToElement(commentTextEl, content);
+// Click behavior
                 commentDiv.addEventListener('click', (event) => {
                     event.stopPropagation();
                     options.onCommentClick?.(highlight, index, event);
@@ -356,22 +342,29 @@ export class HighlightRenderer {
     this.createAddCommentLine(commentsContainer, highlight, options);
 }
 
-    private createAddCommentLine(commentsContainer: HTMLElement, highlight: Highlight, options: HighlightRenderOptions): void {
-        const addCommentLine = commentsContainer.createDiv({
-            cls: 'highlight-add-comment-line'
-        });
-        
-        const plusIcon = addCommentLine.createDiv({ cls: 'highlight-add-comment-icon' });
-        setIcon(plusIcon, 'plus');
-        
-        addCommentLine.createSpan({ text: 'Add comment' });
-        
-        // Add click handler for all highlights (native comments and regular highlights)
-        addCommentLine.addEventListener('click', (event) => {
-            event.stopPropagation();
-            options.onAddComment?.(highlight);
-        });
-    }
+    
+private createAddCommentLine(commentsContainer: HTMLElement, highlight: Highlight, options: HighlightRenderOptions): void {
+    const row = commentsContainer.createDiv({ cls: 'highlight-add-row' });
+    // Add mark comment
+    const addMark = row.createDiv({ cls: 'highlight-add-comment-line' });
+    const markIcon = addMark.createDiv({ cls: 'highlight-add-comment-icon' });
+    setIcon(markIcon, 'plus');
+    addMark.createSpan({ text: 'Add mark comment' });
+    addMark.addEventListener('click', (event) => {
+        event.stopPropagation();
+        (options.onAddMarkComment ?? options.onAddComment)?.(highlight);
+    });
+    // Add footnote comment
+    const addFoot = row.createDiv({ cls: 'highlight-add-comment-line' });
+    const footIcon = addFoot.createDiv({ cls: 'highlight-add-comment-icon' });
+    setIcon(footIcon, 'plus');
+    addFoot.createSpan({ text: 'Add footnote comment' });
+    addFoot.addEventListener('click', (event) => {
+        event.stopPropagation();
+        (options.onAddFootnoteComment ?? options.onAddComment)?.(highlight);
+    });
+}
+
 
 
     private highlightSearchMatches(element: HTMLElement, searchTerm: string): void {

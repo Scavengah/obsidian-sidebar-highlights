@@ -1543,6 +1543,16 @@ export class HighlightsSidebarView extends ItemView {
     })();
 
             },
+            onAddMarkComment: async (highlight) => {
+                this.isPreservingPagination = true;
+                await this.focusHighlightInEditor(highlight);
+                await this.addMarkAnchorToHighlightWithTargetedUpdate(highlight);
+            },
+            onAddFootnoteComment: async (highlight) => {
+                this.isPreservingPagination = true;
+                await this.focusHighlightInEditor(highlight);
+                this.addFootnoteToHighlightWithTargetedUpdate(highlight);
+            },
             onAddComment: async (highlight) => {
                 
                 // Set flag to preserve pagination when adding comments
@@ -1796,6 +1806,41 @@ onFileNameClick: (filePath, event) => {
             }, 100);
         }
     }
+    private async addMarkAnchorToHighlightWithTargetedUpdate(highlight: Highlight) {
+        const activeView = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
+        if (!activeView) return;
+        const editor = activeView.editor;
+        const file = activeView.file;
+        if (!file) return;
+
+        const content = editor.getValue();
+        let insertOffset = highlight.endOffset ?? 0;
+        const after = content.slice(insertOffset);
+        const footRe = /^(\s*(\[\^[a-zA-Z0-9_-]+\]|\^\[[^\]]+\]))+/;
+        const m = after.match(footRe);
+        if (m) {
+            insertOffset += m[0].length;
+            const ws = after.slice(m[0].length).match(/^\s+/);
+            if (ws) insertOffset += ws[0].length;
+        }
+
+        const insertPos = editor.offsetToPos(insertOffset);
+        const needsSpace = insertOffset > 0 && content.charAt(insertOffset - 1) !== ' ' ? ' ' : '';
+        const snippet = `${needsSpace}<span class="comment-anchor"><span class="comment-text">Comment</span></span>`;
+
+        editor.replaceRange(snippet, insertPos);
+
+        const before = content.slice(0, insertOffset) + needsSpace;
+        const startSel = before.length + snippet.indexOf('comment-text">') + 'comment-text"'.length + 2;
+        const endSel = startSel + 'Comment'.length;
+        editor.setSelection(editor.offsetToPos(startSel), editor.offsetToPos(endSel));
+        editor.focus();
+
+        setTimeout(async () => {
+            await this.updateSingleHighlightFromEditor(highlight, file);
+        }, 60);
+    }
+
 
     private async updateSingleHighlightFromEditor(highlight: Highlight, file: TFile) {
         // Re-parse just this highlight from the current editor content

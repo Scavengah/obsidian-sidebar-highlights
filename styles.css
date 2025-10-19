@@ -1837,3 +1837,15 @@ mark[class^="sbh-"] { padding: 0 0.15em; border-radius: 3px; }
 }
 
 .highlight-comment-body {}
+
+
+/* === Added: row for side-by-side comment actions, 11px friendly === */
+.highlight-add-row { display:flex; gap:8px; padding:0 10px 10px 10px; }
+.highlight-add-row .highlight-add-comment-line { padding:6px 10px; border-radius:8px; border:1px solid var(--background-modifier-border); background-color: var(--background-primary-alt); }
+.highlight-add-row .highlight-add-comment-line:hover { background-color: var(--background-modifier-hover); }
+
+/* Inline timestamp flowing with paragraph */
+.highlight-comment-line { display:inline; }
+.highlight-comment-datetime, .highlight-comment-text { display:inline; vertical-align:baseline; }
+.highlight-comment-datetime { opacity:.7; margin-right:6px; font-size:inherit; }
+.highlight-comment-text p { display:inline; margin:0; }
