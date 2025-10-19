@@ -1784,3 +1784,56 @@ mark[class^="sbh-"] { padding: 0 0.15em; border-radius: 3px; }
   font-size: 10px;
   line-height: 1;
 }
+
+/* ===== Subcomment footer bar (mirrors highlight bar styles) ===== */
+.subcomment-actions {
+  display: flex;
+  flex-direction: column;
+  margin-top: 0;
+  padding: 6px 15px 6px 15px;
+  border-top: 0.5px solid var(--background-modifier-border);
+  font-size: var(--font-ui-smaller);
+  transition: background-color 0.2s ease;
+  background: transparent;
+}
+.subcomment-info-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  overflow: visible;
+}
+.subcomment-info-line {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  margin-bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+.subcomment-stats-section {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: visible;
+}
+.subcomment-timestamp-container {
+  margin-left: auto;
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 50%;
+  overflow: hidden;
+}
+.subcomment-timestamp-info {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.highlight-comment-body {}

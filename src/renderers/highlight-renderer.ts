@@ -302,32 +302,59 @@ export class HighlightRenderer {
     }
 
     private createCommentsSection(item: HTMLElement, highlight: Highlight, options: HighlightRenderOptions): void {
-        if (!options.isCommentsVisible) return;
+    if (!options.isCommentsVisible) return;
 
-        const commentsContainer = item.createDiv({ cls: 'highlight-comments' });
-        
-        // For native comments, don't show footnote comments since they don't have footnotes
-        // Only show footnote comments for regular highlights
-        if (!highlight.isNativeComment) {
-            const validFootnoteContents = highlight.footnoteContents?.filter(c => c.trim() !== '') || [];
-            if (validFootnoteContents.length > 0) {
-                validFootnoteContents.forEach((content, index) => {
-                    const commentDiv = commentsContainer.createDiv({ cls: 'highlight-comment' });
-                    this.renderMarkdownToElement(commentDiv, content);
-                    commentDiv.addEventListener('click', (event) => {
-                        event.stopPropagation();
-                        options.onCommentClick?.(highlight, index, event);
+    const commentsContainer = item.createDiv({ cls: 'highlight-comments' });
+
+    // Only render subcomments for real highlights (native comments don't have footnotes/anchors)
+    if (!highlight.isNativeComment) {
+        const validFootnoteContents = highlight.footnoteContents?.filter(c => (c || '').trim() !== '') || [];
+
+        if (validFootnoteContents.length > 0) {
+            validFootnoteContents.forEach((content, index) => {
+                const commentDiv = commentsContainer.createDiv({ cls: 'highlight-comment' });
+
+                // Subcomment body
+                const body = commentDiv.createDiv({ cls: 'highlight-comment-body' });
+                this.renderMarkdownToElement(body, content);
+
+                // Footer bar — reuse parent classes for identical style
+                const actions = commentDiv.createDiv({ cls: 'highlight-actions subcomment-actions' });
+                const infoContainer = actions.createDiv({ cls: 'highlight-info-container' });
+                const infoLineContainer = infoContainer.createDiv({ cls: 'highlight-info-line' });
+
+                // Keep left spacer for consistent spacing
+                infoLineContainer.createDiv({ cls: 'highlight-stats-section' });
+
+                // Right side timestamp
+                if (options.showTimestamp) {
+                    const millis = (highlight.commentTimestamps && (highlight.commentTimestamps as number[])[index] != null)
+                        ? (highlight.commentTimestamps as number[])[index]
+                        : (highlight.createdAt || Date.now());
+                    const tsText = options.dateFormat
+                        ? moment(millis).format(options.dateFormat)
+                        : moment(millis).format('YYYY-MM-DD HH:mm');
+
+                    const tsContainer = infoLineContainer.createDiv({ cls: 'highlight-timestamp-container' });
+                    tsContainer.createDiv({
+                        cls: 'highlight-timestamp-info',
+                        text: tsText,
+                        attr: { title: `Created: ${tsText}` }
                     });
+                }
 
-
+                // Click behavior
+                commentDiv.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    options.onCommentClick?.(highlight, index, event);
                 });
-            }
+            });
         }
-
-        // Add "Add Comment" line for all highlights (regular and native comments)
-        // For native comments, it will be disabled/greyed out
-        this.createAddCommentLine(commentsContainer, highlight, options);
     }
+
+    // "+ Add comment" line (unchanged)
+    this.createAddCommentLine(commentsContainer, highlight, options);
+}
 
     private createAddCommentLine(commentsContainer: HTMLElement, highlight: Highlight, options: HighlightRenderOptions): void {
         const addCommentLine = commentsContainer.createDiv({
