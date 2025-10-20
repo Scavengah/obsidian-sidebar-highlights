@@ -1653,7 +1653,7 @@ onFileNameClick: (filePath, event) => {
                 if (line.includes(`%%${highlight.text}%%`)) {
                     targetLine = i;
                     const highlightEndIndex = line.indexOf(`%%${highlight.text}%%`) + `%%${highlight.text}%%`.length;
-                    // Find the end of any existing footnotes after the highlight
+                    // Insert immediately after the highlight (newest footnote first) after the highlight
                     const afterHighlight = line.substring(highlightEndIndex);
                     const footnoteEndMatch = afterHighlight.match(/^(\s*(\[\^[a-zA-Z0-9_-]+\]|\^\[[^\]]+\]))*/);
                     let footnoteEndLength = footnoteEndMatch ? footnoteEndMatch[0].length : 0;
@@ -1697,7 +1697,7 @@ onFileNameClick: (filePath, event) => {
                     if (match) {
                         targetLine = i;
                         const highlightEndIndex = match.index + match[0].length;
-                        // Find the end of any existing footnotes after the highlight
+                        // Insert immediately after the highlight (newest footnote first) after the highlight
                         const afterHighlight = line.substring(highlightEndIndex);
                         const footnoteEndMatch = afterHighlight.match(/^(\s*(\[\^[a-zA-Z0-9_-]+\]|\^\[[^\]]+\]))*/);
                         let footnoteEndLength = footnoteEndMatch ? footnoteEndMatch[0].length : 0;
@@ -1738,7 +1738,7 @@ onFileNameClick: (filePath, event) => {
                 if (line.includes(`==${highlight.text}==`)) {
                     targetLine = i;
                     const highlightEndIndex = line.indexOf(`==${highlight.text}==`) + `==${highlight.text}==`.length;
-                    // Find the end of any existing footnotes after the highlight
+                    // Insert immediately after the highlight (newest footnote first) after the highlight
                     const afterHighlight = line.substring(highlightEndIndex);
                     const footnoteEndMatch = afterHighlight.match(/^(\s*(\[\^[a-zA-Z0-9_-]+\]|\^\[[^\]]+\]))*/);
                     let footnoteEndLength = footnoteEndMatch ? footnoteEndMatch[0].length : 0;
@@ -1824,7 +1824,29 @@ onFileNameClick: (filePath, event) => {
             if (ws) insertOffset += ws[0].length;
         }
 
-        const insertPos = editor.offsetToPos(insertOffset);
+        
+        
+        // Append after any existing comment-anchor blocks so comments group under the same card
+        {
+            let after2 = content.slice(insertOffset);
+            const trailingAnchorRe = new RegExp(String.raw`^\s*<span\s+class=['"]comment-anchor['"][^>]*>\s*<span\s+class=['"]comment-text['"][^>]*>[\s\S]*?<\/span>\s*<\/span>`, 'i');
+            let ma;
+            while ((ma = after2.match(trailingAnchorRe))) {
+                insertOffset += ma[0].length;
+                after2 = content.slice(insertOffset);
+            }
+        }
+        // Append after any existing anchors to keep them grouped with this highlight
+        {
+            let after2 = content.slice(insertOffset);
+            const trailingAnchorRe = /^\s*<span\s+class=["']comment-anchor["'][^>]*>\s*<span\s+class=["']comment-text["'][^>]*>[\s\S]*?<\/span>\s*<\/span>/i;
+            let am2;
+            while ((am2 = after2.match(trailingAnchorRe))) {
+                insertOffset += am2[0].length;
+                after2 = content.slice(insertOffset);
+            }
+        }
+const insertPos = editor.offsetToPos(insertOffset);
         const needsSpace = insertOffset > 0 && content.charAt(insertOffset - 1) !== ' ' ? ' ' : '';
         const snippet = `${needsSpace}<span class="comment-anchor"><span class="comment-text">Comment</span></span>`;
 
@@ -1870,83 +1892,71 @@ onFileNameClick: (filePath, event) => {
         }
     }
 
-    private findAndParseHighlight(content: string, originalHighlight: Highlight, footnoteMap: Map<string, string>): Highlight | null {
-        // This is a simplified version - we're looking for the same highlight text and updating its footnotes
-        const regex = originalHighlight.isNativeComment ? 
-            new RegExp(`%%${this.escapeRegex(originalHighlight.text)}%%`, 'g') :
-            new RegExp(`==${this.escapeRegex(originalHighlight.text)}==`, 'g');
-        
-        let match;
-        while ((match = regex.exec(content)) !== null) {
-            // Check if this is likely the same highlight (same position roughly)
-            if (Math.abs(match.index - originalHighlight.startOffset) < 100) { // Within 100 characters
-                // Parse footnotes for this highlight using same logic as main parsing
-                const afterHighlight = content.slice(match.index + match[0].length);
+    
+private findAndParseHighlight(content: string, originalHighlight: Highlight, footnoteMap: Map<string, string>): Highlight | null {
+    const isHtml = (!!(originalHighlight as any).color && !originalHighlight.isNativeComment) || (originalHighlight as any).type === 'html';
+    const baseRegex = originalHighlight.isNativeComment
+        ? new RegExp(`%%${this.escapeRegex(originalHighlight.text)}%%`, 'gi')
+        : (isHtml
+            ? new RegExp(`<(?:mark|span|font)[^>]*>${this.escapeRegex(originalHighlight.text)}<\/(?:mark|span|font)>`, 'gi')
+            : new RegExp(`==${this.escapeRegex(originalHighlight.text)}==`, 'gi'));
+    
+    let match: RegExpExecArray | null;
+    while ((match = baseRegex.exec(content)) !== null) {
+        if (Math.abs(match.index - (originalHighlight.startOffset ?? 0)) < 100) {
+            const after = content.slice(match.index + match[0].length);
+            const tokens: Array<{type: 'standard' | 'inline', index: number, content: string}> = [];
+            
+            let pos = 0;
+            const inlineRe = /^\^\[([^\]]+)\]/;                 // inline footnote ^[...]
+            const standardRe = /^\[\^([a-zA-Z0-9_-]+)\](?!:)/;   // standard footnote [^key] (not a definition)
+            const anchorRe = new RegExp(String.raw`^\s*<span\s+class=['"]comment-anchor['"][^>]*>\s*<span\s+class=['"]comment-text['"][^>]*>([\s\S]*?)<\/span>\s*<\/span>`, 'i');
+            
+            while (pos < after.length) {
+                const slice = after.slice(pos);
+                const ws = slice.match(/^\s+/);
+                if (ws) { pos += ws[0].length; continue; }
                 
-                // Find all footnotes (both standard and inline) in order
-                const allFootnotes: Array<{type: 'standard' | 'inline', index: number, content: string}> = [];
-                
-                // First, get all inline footnotes with their positions
-                const inlineFootnotes = this.plugin.inlineFootnoteManager.extractInlineFootnotes(content, match.index + match[0].length);
-                inlineFootnotes.forEach(footnote => {
-                    if (footnote.content.trim()) {
-                        allFootnotes.push({
-                            type: 'inline',
-                            index: footnote.startIndex,
-                            content: footnote.content.trim()
-                        });
-                    }
-                });
-                
-                // Then, get all standard footnotes with their positions (using same validation logic)
-                const standardFootnoteRegex = /(\s*\[\^(\w+)\])(?!:)/g;
-                let stdMatch;
-                let lastValidPosition = 0;
-                
-                while ((stdMatch = standardFootnoteRegex.exec(afterHighlight)) !== null) {
-                    // Check if this standard footnote is in a valid position
-                    const precedingText = afterHighlight.substring(lastValidPosition, stdMatch.index);
-                    const isValid = /^(\s*(\[\^[a-zA-Z0-9_-]+\]|\^\[[^\]]+\])\s*)*\s*$/.test(precedingText);
-                    
-                    if (stdMatch.index === lastValidPosition || isValid) {
-                        const key = stdMatch[2]; // The key inside [^key]
-                        if (footnoteMap.has(key)) {
-                            const fnContent = footnoteMap.get(key)!.trim();
-                            if (fnContent) { // Only add non-empty content
-                                allFootnotes.push({
-                                    type: 'standard',
-                                    index: match.index + match[0].length + stdMatch.index,
-                                    content: fnContent
-                                });
-                            }
-                        }
-                        lastValidPosition = stdMatch.index + stdMatch[0].length;
-                    } else {
-                        // Stop if we encounter a footnote that's not in the valid sequence
-                        break;
-                    }
+                const am = slice.match(anchorRe);
+                if (am) {
+                    const tpl = document.createElement('template');
+                    tpl.innerHTML = am[1] || '';
+                    const txt = (tpl.content.textContent || '').replace(/\s+/g, ' ').trim();
+                    if (txt) tokens.push({ type: 'inline', index: match.index + match[0].length + pos, content: txt });
+                    pos += am[0].length;
+                    continue;
                 }
                 
-                // Sort footnotes by their position in the text
-                allFootnotes.sort((a, b) => a.index - b.index);
+                const im = slice.match(inlineRe);
+                if (im) {
+                    const txt = (im[1] || '').trim();
+                    if (txt) tokens.push({ type: 'inline', index: match.index + match[0].length + pos, content: txt });
+                    pos += im[0].length;
+                    continue;
+                }
                 
-                // Extract content in the correct order
-                const footnoteContents = allFootnotes.map(f => f.content);
-                const footnoteCount = footnoteContents.length;
+                const sm = slice.match(standardRe);
+                if (sm) {
+                    const key = sm[1];
+                    const body = (footnoteMap.get(key) || '').trim();
+                    if (body) tokens.push({ type: 'standard', index: match.index + match[0].length + pos, content: body });
+                    pos += sm[0].length;
+                    continue;
+                }
                 
-                // Return updated highlight
-                return {
-                    ...originalHighlight,
-                    footnoteCount,
-                    footnoteContents,
-                    startOffset: match.index,
-                    endOffset: match.index + match[0].length
-                };
+                break;
             }
+            
+            tokens.sort((a, b) => a.index - b.index);
+            const footnoteContents = tokens.map(t => t.content);
+            const footnoteCount = footnoteContents.length;
+            
+            return { ...originalHighlight, footnoteContents, footnoteCount, startOffset: match.index, endOffset: match.index + match[0].length };
         }
-        
-        return null;
     }
+    return null;
+}
+
 
     async focusHighlightInEditor(highlight: Highlight, event?: MouseEvent) {
         

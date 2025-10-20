@@ -1278,6 +1278,7 @@ this.addCommand({
         const spanClassRegex = /<span\s+class=["']([^"']+)["'][^>]*>(.*?)<\/span>/gi;
         const newHighlights: Highlight[] = [];
         const consumedAnchorStarts = new Set<number>();
+            const consumedAnchorRanges: [number, number][] = [];
         const existingHighlightsForFile = this.highlights.get(file.path) || [];
         const usedExistingHighlights = new Set<string>(); // Track which highlights we've already matched
         
@@ -1492,90 +1493,123 @@ this.addCommand({
             
             let footnoteContents: string[] = [];
             let footnoteCount = 0;
+
             
             if (type === 'highlight' || type === 'html') {
-                // For regular and HTML highlights, extract footnotes in the order they appear in the text
+                // Unified scanner: consume a contiguous run of (whitespace | inline footnote | standard footnote | comment-anchor)
+                // in the order they appear immediately after the highlight.
                 const afterHighlight = content.substring(match.index + match[0].length);
-                
-                // Find all footnotes (both standard and inline) in order
                 const allFootnotes: Array<{type: 'standard' | 'inline', index: number, content: string}> = [];
                 
-                // First, get all inline footnotes with their positions
-                const inlineFootnotes = this.inlineFootnoteManager.extractInlineFootnotes(content, match.index + match[0].length);
-                inlineFootnotes.forEach(footnote => {
-                    if (footnote.content.trim()) {
-                        allFootnotes.push({
-                            type: 'inline',
-                            index: footnote.startIndex,
-                            content: footnote.content.trim()
-                        });
-                    }
-                });
+                let pos = 0;
+                const inlineRe = /^\s*\^\[([^\]]+)\]/; // inline footnote token
+                const standardRe = /^\s*\[\^([a-zA-Z0-9_-]+)\](?!:)/; // standard footnote token (not definition)
+                const anchorRe = /^\s*<span\s+class=["']comment-anchor["'][^>]*>\s*<span\s+class=["']comment-text["'][^>]*>([\s\S]*?)<\/span>\s*<\/span>/i;
                 
-                // Then, get all standard footnotes with their positions (using same validation logic)
-                // Use negative lookahead to avoid matching footnote definitions [^key]: content
-                const standardFootnoteRegex = /(\s*\[\^(\w+)\])(?!:)/g;
-                let match_sf;
-                let lastValidPosition = 0;
-                
-                while ((match_sf = standardFootnoteRegex.exec(afterHighlight)) !== null) {
-                    // Check if this standard footnote is in a valid position
-                    const precedingText = afterHighlight.substring(lastValidPosition, match_sf.index);
-                    const isValid = /^(\s*(\[\^[a-zA-Z0-9_-]+\]|\^\[[^\]]+\])\s*)*\s*$/.test(precedingText);
+                scanLoop: while (pos < afterHighlight.length) {
+                    const slice = afterHighlight.slice(pos);
                     
-                    if (match_sf.index === lastValidPosition || isValid) {
-                        const key = match_sf[2]; // The key inside [^key]
+                    // Allow any whitespace
+                    const ws = slice.match(/^\s+/);
+                    if (ws) {
+                        pos += ws[0].length;
+                        continue;
+                    }
+                    
+                    // Comment anchor
+                    const am = slice.match(anchorRe);
+                    if (am) {
+                        const anchorStart = match.index + match[0].length + pos;
+                        const anchorEnd = anchorStart + am[0].length;
+                        const tpl = document.createElement('template');
+                        tpl.innerHTML = am[1] || '';
+                        const anchorText = (tpl.content.textContent || '').replace(/\s+/g, ' ').trim();
+                        if (anchorText) {
+                            allFootnotes.push({ type: 'inline', index: anchorStart, content: anchorText });
+                            consumedAnchorStarts.add(anchorStart);
+                            consumedAnchorRanges.push([anchorStart, anchorEnd]);
+                        }
+                        pos += am[0].length;
+                        continue;
+                    }
+                    
+                    // Inline footnote
+                    const im = slice.match(inlineRe);
+                    if (im) {
+                        const inlineContent = (im[1] || '').trim();
+                        if (inlineContent) {
+                            allFootnotes.push({ type: 'inline', index: match.index + match[0].length + pos, content: inlineContent });
+                        }
+                        pos += im[0].length;
+                        continue;
+                    }
+                    
+                    // Standard footnote
+                    const sm = slice.match(standardRe);
+                    if (sm) {
+                        const key = sm[1];
                         if (footnoteMap.has(key)) {
-                            const fnContent = footnoteMap.get(key)!.trim();
-                            if (fnContent) { // Only add non-empty content
-                                allFootnotes.push({
-                                    type: 'standard',
-                                    index: match.index + match[0].length + match_sf.index,
-                                    content: fnContent
-                                });
+                            const fnContent = (footnoteMap.get(key) || '').trim();
+                            if (fnContent) {
+                                allFootnotes.push({ type: 'standard', index: match.index + match[0].length + pos, content: fnContent });
                             }
                         }
-                        lastValidPosition = match_sf.index + match_sf[0].length;
-                    } else {
-                        // Stop if we encounter a footnote that's not in the valid sequence
-                        break;
+                        pos += sm[0].length;
+                        continue;
                     }
+                    
+                    break scanLoop; // Next token is not an anchor/footnote; stop scanning
                 }
                 
-                // Sort footnotes by their position in the text
+                // Extract content in encountered order
                 allFootnotes.sort((a, b) => a.index - b.index);
-                
-                // Extract content in the correct order
                 footnoteContents = allFootnotes.map(f => f.content);
                 footnoteCount = footnoteContents.length;
                 
             } else if (type === 'comment') {
+} else if (type === 'comment') {
                 // For comments, the text itself IS the comment content
                 footnoteContents = [highlightText];
                 footnoteCount = 1;
             }
             
             
-            // Attach adjacent <span class="comment-anchor"><span class="comment-text">…</span></span> (0–1 space tolerance)
-            if (type === 'highlight' || type === 'html') {
-                const endOfThisHighlight = match.index + match[0].length;
-                const after = content.slice(endOfThisHighlight);
-                const mAnchor = after.match(/^(?:\s{0,1})<span\s+class=["']comment-anchor["'][^>]*>\s*<span\s+class=["']comment-text["'][^>]*>([\s\S]*?)<\/span>\s*<\/span>/i);
-                if (mAnchor) {
-                    const leadingSpace = after.startsWith(' ') ? 1 : 0;
-                    const anchorStart = endOfThisHighlight + leadingSpace;
-                    const tpl = document.createElement('template');
-                    tpl.innerHTML = mAnchor[1] || '';
-                    const anchorText = (tpl.content.textContent || '').replace(/\s+/g, ' ').trim();
-                    if (anchorText) {
-                        footnoteContents = Array.isArray(footnoteContents) ? footnoteContents : [];
-                        footnoteContents.push(anchorText);
-                        footnoteCount = (footnoteCount || 0) + 1;
-                        consumedAnchorStarts.add(anchorStart);
-                    }
-                }
-            }
-if (existingHighlight) {
+            
+// Attach any number of adjacent comment anchors (0–1 space tolerance between each)
+if (type === 'highlight' || type === 'html') {
+    const endOfThisHighlight = match.index + match[0].length;
+    let pos = 0;
+    const after = content.slice(endOfThisHighlight);
+    const anchorRe = new RegExp(
+        String.raw`^(?:\s{0,1})<span\s+class=["']comment-anchor["'][^>]*>\s*<span\s+class=["']comment-text["'][^>]*>([\s\S]*?)<\/span>\s*<\/span>`,
+        'i'
+    );
+    while (true) {
+        const slice = after.slice(pos);
+        const mAnchor = slice.match(anchorRe);
+        if (!mAnchor) break;
+        const leadingSpace = slice.startsWith(' ') ? 1 : 0;
+        const absoluteStart = endOfThisHighlight + pos;
+        const anchorStart = absoluteStart + leadingSpace;
+        const anchorEnd = anchorStart + mAnchor[0].length;
+        const tpl = document.createElement('template');
+        tpl.innerHTML = mAnchor[1] || '';
+        const anchorText = (tpl.content.textContent || '').replace(/\s+/g, ' ').trim();
+        if (anchorText) {
+            (footnoteContents ??= []).push(anchorText);
+            footnoteCount = (footnoteCount ?? 0) + 1;
+            consumedAnchorStarts.add(anchorStart);
+            consumedAnchorRanges.push([anchorStart, anchorEnd]);
+        }
+        pos += leadingSpace + mAnchor[0].length;
+    }
+}
+
+// Skip matches that land inside an already-consumed <span class="comment-anchor">…</span>
+const __inConsumedAnchor = consumedAnchorRanges.some(([a, b]) => match.index >= a && match.index < b);
+if (__inConsumedAnchor) {
+    // do nothing - this match is part of an anchor we already attached
+} else if (existingHighlight) {
                 newHighlights.push({
                     ...existingHighlight,
                     line: lineNumber,
