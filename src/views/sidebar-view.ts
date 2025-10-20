@@ -1948,7 +1948,15 @@ private findAndParseHighlight(content: string, originalHighlight: Highlight, foo
             }
             
             tokens.sort((a, b) => a.index - b.index);
-            const footnoteContents = tokens.map(t => t.content);
+            const dedup: typeof tokens = [];
+            const seen = new Set<number>();
+            for (const t of tokens) {
+                if (!seen.has(t.index)) { seen.add(t.index); dedup.push(t); }
+            }
+            const seenContent = new Set<string>();
+            const normalizeContent = (s: string) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+            const dedup2 = dedup.filter(t => { const k = normalizeContent(t.content); if (seenContent.has(k)) return false; seenContent.add(k); return true; });
+            const footnoteContents = dedup2.map(t => t.content);
             const footnoteCount = footnoteContents.length;
             
             return { ...originalHighlight, footnoteContents, footnoteCount, startOffset: match.index, endOffset: match.index + match[0].length };

@@ -227,7 +227,9 @@ export class HighlightRenderer {
         this.createInfoItem(statsSection, 'text', `${lineNumber}`, 'highlight-line-info');
 
         // Comment count section - don't show comment count for native comments since they ARE the comment
-        const validFootnoteCount = highlight.isNativeComment ? 0 : (highlight.footnoteContents?.filter(c => c.trim() !== '').length || 0);
+        const _rawCountContents = highlight.footnoteContents?.filter(c => (c || '').trim() !== '') || [];
+        const _norm = (s: string) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        const validFootnoteCount = highlight.isNativeComment ? 0 : Array.from(new Set(_rawCountContents.map(_norm))).length;
         const commentStatClass = highlight.isNativeComment 
             ? 'highlight-line-info highlight-comment-stat disabled'
             : 'highlight-line-info highlight-comment-stat clickable';
@@ -310,7 +312,9 @@ export class HighlightRenderer {
 
     // Only render subcomments for real highlights (native comments don't have footnotes/anchors)
     if (!highlight.isNativeComment) {
-        const validFootnoteContents = highlight.footnoteContents?.filter(c => (c || '').trim() !== '') || [];
+        const _rawFootnoteContents = highlight.footnoteContents?.filter(c => (c || '').trim() !== '') || [];
+        const _normalize = (s: string) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        const validFootnoteContents = Array.from(new Map(_rawFootnoteContents.map(c => [_normalize(c), c])).values());
 
         if (validFootnoteContents.length > 0) {
             validFootnoteContents.forEach((content, index) => {

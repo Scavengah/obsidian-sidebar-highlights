@@ -1563,7 +1563,14 @@ this.addCommand({
                 
                 // Extract content in encountered order
                 allFootnotes.sort((a, b) => a.index - b.index);
-                footnoteContents = allFootnotes.map(f => f.content);
+                const dedup: typeof allFootnotes = [];
+                const seen = new Set<number>();
+                for (const t of allFootnotes) {
+                    if (!seen.has(t.index)) { seen.add(t.index); dedup.push(t); }
+                }
+                const seenContent = new Set<string>();
+                const dedup2 = dedup.filter(f => { const k = (f.content || '').trim(); if (seenContent.has(k)) return false; seenContent.add(k); return true; });
+                footnoteContents = dedup2.map(f => f.content);
                 footnoteCount = footnoteContents.length;
                 
             } else if (type === 'comment') {
