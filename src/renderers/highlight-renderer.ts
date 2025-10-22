@@ -227,9 +227,7 @@ export class HighlightRenderer {
         this.createInfoItem(statsSection, 'text', `${lineNumber}`, 'highlight-line-info');
 
         // Comment count section - don't show comment count for native comments since they ARE the comment
-        const _rawCountContents = highlight.footnoteContents?.filter(c => (c || '').trim() !== '') || [];
-        const _norm = (s: string) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
-        const validFootnoteCount = highlight.isNativeComment ? 0 : Array.from(new Set(_rawCountContents.map(_norm))).length;
+        const validFootnoteCount = highlight.isNativeComment ? 0 : (highlight.footnoteContents?.filter(c => c.trim() !== '').length || 0);
         const commentStatClass = highlight.isNativeComment 
             ? 'highlight-line-info highlight-comment-stat disabled'
             : 'highlight-line-info highlight-comment-stat clickable';
@@ -312,20 +310,34 @@ export class HighlightRenderer {
 
     // Only render subcomments for real highlights (native comments don't have footnotes/anchors)
     if (!highlight.isNativeComment) {
-        const _rawFootnoteContents = highlight.footnoteContents?.filter(c => (c || '').trim() !== '') || [];
-        const _normalize = (s: string) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
-        const validFootnoteContents = Array.from(new Map(_rawFootnoteContents.map(c => [_normalize(c), c])).values());
+        const validFootnoteContents = highlight.footnoteContents?.filter(c => (c || '').trim() !== '') || [];
 
         if (validFootnoteContents.length > 0) {
-            validFootnoteContents.forEach((content, index) => {
+            const pairs = validFootnoteContents.map((content, index) => ({
+                content,
+                ts: (highlight.commentTimestamps && (highlight.commentTimestamps as number[])[index] != null)
+                    ? (highlight.commentTimestamps as number[])[index]
+                    : (highlight.createdAt || Date.now())
+            }));
+            // Final-stage de-duplication by normalized content (keep earliest timestamp)
+            const normalize = (s: string) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+            const uniqMap = new Map<string, { content: string, ts: number | undefined }>();
+            for (const p of pairs) {
+                const k = normalize(p.content);
+                const prev = uniqMap.get(k);
+                if (!prev || ((p.ts ?? Infinity) < (prev.ts ?? Infinity))) {
+                    uniqMap.set(k, { content: p.content, ts: p.ts });
+                }
+            }
+            const uniq = Array.from(uniqMap.values());
+            uniq.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+            uniq.forEach(({ content, ts }, index) => {
                 
                 const commentDiv = commentsContainer.createDiv({ cls: 'highlight-comment' });
                 const body = commentDiv.createDiv({ cls: 'highlight-comment-body' });
                 const line = body.createDiv({ cls: 'highlight-comment-line' });
                 if (options.showTimestamp) {
-                    const millis = (highlight.commentTimestamps && (highlight.commentTimestamps as number[])[index] != null)
-                        ? (highlight.commentTimestamps as number[])[index]
-                        : (highlight.createdAt || Date.now());
+                    const millis = ts;
                     const tsText = options.dateFormat
                         ? moment(millis).format(options.dateFormat)
                         : moment(millis).format('YYYY-MM-DD HH:mm');

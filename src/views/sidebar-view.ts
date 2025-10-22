@@ -1848,12 +1848,25 @@ onFileNameClick: (filePath, event) => {
         }
 const insertPos = editor.offsetToPos(insertOffset);
         const needsSpace = insertOffset > 0 && content.charAt(insertOffset - 1) !== ' ' ? ' ' : '';
-        const snippet = `${needsSpace}<span class="comment-anchor"><span class="comment-text">Comment</span></span>`;
+        const now = new Date();
+        const tsStr = `${now.getFullYear()}${('0'+(now.getMonth()+1)).slice(-2)}${('0'+now.getDate()).slice(-2)}-${('0'+now.getHours()).slice(-2)}${('0'+now.getMinutes()).slice(-2)}${('0'+now.getSeconds()).slice(-2)}`;
+        const snippet = `${needsSpace}<span class="comment-anchor"><span class="comment-text" date-comment="${tsStr}">Comment</span></span>`;
 
-        editor.replaceRange(snippet, insertPos);
+        // Prevent duplicate comment-anchor immediately after the highlight
+            const doc = editor.getValue();
+            const insOffset = editor.posToOffset(insertPos);
+            const lookahead = doc.slice(insOffset, insOffset + 200);
+            const alreadyHasAnchor = /^\s*<span\s+class=['"]comment-anchor['"]/i.test(lookahead);
+            if (alreadyHasAnchor) {
+                // Do not insert a second anchor
+                return;
+            }
+            editor.replaceRange(snippet, insertPos);
 
         const before = content.slice(0, insertOffset) + needsSpace;
-        const startSel = before.length + snippet.indexOf('comment-text">') + 'comment-text"'.length + 2;
+        const openIdx = snippet.indexOf('<span class="comment-text"');
+        const gt = snippet.indexOf('>', openIdx);
+        const startSel = before.length + gt + 1;
         const endSel = startSel + 'Comment'.length;
         editor.setSelection(editor.offsetToPos(startSel), editor.offsetToPos(endSel));
         editor.focus();
@@ -1905,7 +1918,7 @@ private findAndParseHighlight(content: string, originalHighlight: Highlight, foo
     while ((match = baseRegex.exec(content)) !== null) {
         if (Math.abs(match.index - (originalHighlight.startOffset ?? 0)) < 100) {
             const after = content.slice(match.index + match[0].length);
-            const tokens: Array<{type: 'standard' | 'inline', index: number, content: string}> = [];
+            const tokens: Array<{type: 'standard' | 'inline', index: number, content: string, ts?: number}> = [];
             
             let pos = 0;
             const inlineRe = /^\^\[([^\]]+)\]/;                 // inline footnote ^[...]
@@ -1920,9 +1933,20 @@ private findAndParseHighlight(content: string, originalHighlight: Highlight, foo
                 const am = slice.match(anchorRe);
                 if (am) {
                     const tpl = document.createElement('template');
-                    tpl.innerHTML = am[1] || '';
-                    const txt = (tpl.content.textContent || '').replace(/\s+/g, ' ').trim();
-                    if (txt) tokens.push({ type: 'inline', index: match.index + match[0].length + pos, content: txt });
+                    tpl.innerHTML = am[0] || '';
+                    const el = tpl.content.querySelector('.comment-text') as HTMLElement | null;
+                    const txt = (el?.textContent || tpl.content.textContent || '').replace(/\s+/g, ' ').trim();
+                    let ts: number | undefined = undefined;
+                    const dc = el?.getAttribute('date-comment') || '';
+                    if (dc && /^\d{8}-\d{6}$/.test(dc)) {
+                        const y = Number(dc.slice(0,4)), mo = Number(dc.slice(4,6))-1, d = Number(dc.slice(6,8));
+                        const hh = Number(dc.slice(9,11)), mm = Number(dc.slice(11,13)), ss = Number(dc.slice(13,15));
+                        ts = new Date(y, mo, d, hh, mm, ss).getTime();
+                    } else {
+                        const tsAttr = el?.getAttribute('data-comment-ts');
+                        if (tsAttr) { const n = Number(tsAttr); if (!Number.isNaN(n)) ts = n; }
+                    }
+                    if (txt) tokens.push({ type: 'inline', index: match.index + match[0].length + pos, content: txt, ts });
                     pos += am[0].length;
                     continue;
                 }
@@ -1957,9 +1981,19 @@ private findAndParseHighlight(content: string, originalHighlight: Highlight, foo
             const normalizeContent = (s: string) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
             const dedup2 = dedup.filter(t => { const k = normalizeContent(t.content); if (seenContent.has(k)) return false; seenContent.add(k); return true; });
             const footnoteContents = dedup2.map(t => t.content);
+            const commentTimestamps = dedup2.map(t => t.ts);
             const footnoteCount = footnoteContents.length;
             
-            return { ...originalHighlight, footnoteContents, footnoteCount, startOffset: match.index, endOffset: match.index + match[0].length };
+            const _openTag = (match[0].match(/<mark\b[^>]*>/i)?.[0] || '');
+            const _dh = _openTag.match(/date-highlight\s*=\s*["'](\d{8}-\d{6})["']/i)?.[1];
+            const _dhts = _openTag.match(/data-highlight-ts\s*=\s*["'](\d+)["']/i)?.[1];
+            let _createdAt: number | undefined = undefined;
+            if (_dh && /^\d{8}-\d{6}$/.test(_dh)) {
+                const y = Number(_dh.slice(0,4)), mo = Number(_dh.slice(4,6))-1, d = Number(_dh.slice(6,8));
+                const hh = Number(_dh.slice(9,11)), mm = Number(_dh.slice(11,13)), ss = Number(_dh.slice(13,15));
+                _createdAt = new Date(y, mo, d, hh, mm, ss).getTime();
+            } else if (_dhts) { const n = Number(_dhts); if (!Number.isNaN(n)) _createdAt = n; }
+            return { ...originalHighlight, footnoteContents, commentTimestamps, footnoteCount, startOffset: match.index, endOffset: match.index + match[0].length };
         }
     }
     return null;

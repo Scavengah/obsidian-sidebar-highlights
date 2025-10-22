@@ -207,7 +207,9 @@ private _stripAlphaHex(hex: string): string {
 private _applyMarkToSelection(editor: Editor, item: { name: string; ui: string; doc: string }) {
     const docHex = this._stripAlphaHex(item?.doc || item?.ui || this.settings.customColors.yellow);
     const cls = `sbh-${this._slugifyName(item?.name || '')}`;
-    const openTag = `<mark class="${cls}" style="background: ${docHex};">`;
+    const now = new Date();
+    const dh = `${now.getFullYear()}${('0'+(now.getMonth()+1)).slice(-2)}${('0'+now.getDate()).slice(-2)}-${('0'+now.getHours()).slice(-2)}${('0'+now.getMinutes()).slice(-2)}${('0'+now.getSeconds()).slice(-2)}`;
+    const openTag = `<mark date-highlight="${dh}" class="${cls}" style="background: ${docHex};">`;
     const closeTag = `</mark>`;
 
     const sel = editor.getSelection();
@@ -1629,7 +1631,23 @@ if (__inConsumedAnchor) {
                     // Update color for HTML highlights, preserve existing for others
                     color: type === 'html' ? color : existingHighlight.color,
                     // Preserve existing createdAt timestamp if it exists
-                    createdAt: existingHighlight.createdAt || Date.now(),
+                    createdAt: (function() {
+                        try {
+                            if (type === 'html') {
+                                const open = (match[0].match(/<mark\b[^>]*>/i)?.[0] || '');
+                                const dc = open.match(/date-highlight\s*=\s*["'](\d{8}-\d{6})["']/i)?.[1];
+                                const dts = open.match(/data-highlight-ts\s*=\s*["'](\d+)["']/i)?.[1];
+                                if (dc && /^\d{8}-\d{6}$/.test(dc)) {
+                                    const y = Number(dc.slice(0,4)), mo = Number(dc.slice(4,6))-1, d = Number(dc.slice(6,8));
+                                    const hh = Number(dc.slice(9,11)), mm = Number(dc.slice(11,13)), ss = Number(dc.slice(13,15));
+                                    return new Date(y, mo, d, hh, mm, ss).getTime();
+                                } else if (dts) {
+                                    const n = Number(dts); if (!Number.isNaN(n)) return n;
+                                }
+                            }
+                        } catch {}
+                        return existingHighlight.createdAt || Date.now();
+                    })(),
                     // Store the type for proper identification
                     type: type,
                     markClassSlug: (cls || (type==='html' ? cls : undefined))
@@ -1648,7 +1666,23 @@ if (__inConsumedAnchor) {
                     filePath: file.path,
                     footnoteCount: footnoteCount,
                     footnoteContents: footnoteContents,
-                    createdAt: uniqueTimestamp,
+                    createdAt: (function() {
+                        try {
+                            if (type === 'html') {
+                                const open = (match[0].match(/<mark\b[^>]*>/i)?.[0] || '');
+                                const dc = open.match(/date-highlight\s*=\s*["'](\d{8}-\d{6})["']/i)?.[1];
+                                const dts = open.match(/data-highlight-ts\s*=\s*["'](\d+)["']/i)?.[1];
+                                if (dc && /^\d{8}-\d{6}$/.test(dc)) {
+                                    const y = Number(dc.slice(0,4)), mo = Number(dc.slice(4,6))-1, d = Number(dc.slice(6,8));
+                                    const hh = Number(dc.slice(9,11)), mm = Number(dc.slice(11,13)), ss = Number(dc.slice(13,15));
+                                    return new Date(y, mo, d, hh, mm, ss).getTime();
+                                } else if (dts) {
+                                    const n = Number(dts); if (!Number.isNaN(n)) return n;
+                                }
+                            }
+                        } catch {}
+                        return uniqueTimestamp;
+                    })(),
                     isNativeComment: type === 'comment',
                     // Set color for HTML highlights
                     color: type === 'html' ? color : undefined,
