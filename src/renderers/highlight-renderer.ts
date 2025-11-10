@@ -1,4 +1,4 @@
-import { setIcon, TFile, Menu, Notice, moment } from 'obsidian';
+import { setIcon, TFile, Menu, moment } from 'obsidian';
 import type { Highlight } from '../../main';
 import type HighlightCommentsPlugin from '../../main';
 
@@ -276,31 +276,77 @@ export class HighlightRenderer {
         return itemContainer;
     }
 
-    private addTimestampToInfoLine(infoLineContainer: HTMLElement, highlight: Highlight, options: HighlightRenderOptions): void {
-        if (options.showTimestamp && highlight.createdAt) {
-            const timestamp = moment(highlight.createdAt);
-            const timeString = options.dateFormat ? timestamp.format(options.dateFormat) : timestamp.format('YYYY-MM-DD HH:mm');
-            
-            // Create a separate timestamp container div
-            const timestampContainer = infoLineContainer.createDiv({ cls: 'highlight-timestamp-container' });
-            const label = this.resolveLabelFromHighlight(highlight);
-            if (label) {
-                const slug = this._slugifyName(label);
-                const chip = timestampContainer.createEl('span', { cls: 'highlight-color-label', text: label, attr: { role: 'link', tabindex: '0' } });
-                const handle = (ev: any) => { ev.stopPropagation(); options.onColorLabelClick?.(label, (highlight.color || this.plugin.settings.highlightColor), slug, ev); };
-                chip.addEventListener('click', handle);
-                chip.addEventListener('keydown', (e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') handle(e); });
-            }
-            const timestampEl = timestampContainer.createDiv({
-                cls: 'highlight-timestamp-info',
-                text: timeString,
-                attr: { title: `Created: ${timeString}` }
+    
+    private addTimestampToInfoLine(
+        infoLineContainer: HTMLElement,
+        highlight: Highlight,
+        options: HighlightRenderOptions
+    ): void {
+        if (!options.showTimestamp) {
+            return;
+        }
+
+        const h = highlight as any;
+        const commentTs: number[] = Array.isArray(h.commentTimestamps)
+            ? h.commentTimestamps.filter(
+                  (ts: unknown): ts is number =>
+                      typeof ts === 'number' && !Number.isNaN(ts)
+              )
+            : [];
+
+        const baseTs: number | undefined =
+            typeof highlight.createdAt === 'number' && !Number.isNaN(highlight.createdAt)
+                ? highlight.createdAt
+                : (commentTs.length > 0 ? commentTs[0] : undefined);
+
+
+        if (!baseTs) {
+            return;
+        }
+
+        const timestamp = moment(baseTs);
+        const timeString = options.dateFormat
+            ? timestamp.format(options.dateFormat)
+            : timestamp.format('YYYY-MM-DD HH:mm');
+
+        const timestampContainer = infoLineContainer.createDiv({
+            cls: 'highlight-timestamp-container',
+        });
+
+        const label = this.resolveLabelFromHighlight(highlight);
+        if (label) {
+            const slug = this._slugifyName(label);
+            const chip = timestampContainer.createEl('span', {
+                cls: 'highlight-color-label',
+                text: label,
+                attr: { role: 'link', tabindex: '0' },
+            });
+
+            const handle = (ev: MouseEvent | KeyboardEvent) => {
+                ev.stopPropagation();
+                (this.plugin.collectionsManager as any)?.toggleFilterByLabel(
+                    label,
+                    highlight.color || this.plugin.settings.highlightColor,
+                    slug,
+                    ev as any
+                );
+            };
+
+            chip.addEventListener('click', handle);
+            chip.addEventListener('keydown', (e: KeyboardEvent) => {
+                if (e.key === 'Enter' || e.key === ' ') handle(e);
             });
         }
+
+        timestampContainer.createDiv({
+            cls: 'highlight-timestamp-info',
+            text: timeString,
+            attr: { title: `Created: ${timeString}` },
+        });
     }
 
     private addActionButtons(actions: HTMLElement, highlight: Highlight, options: HighlightRenderOptions): void {
-        const buttonContainer = actions.createDiv({ cls: 'comment-buttons' });
+        actions.createDiv({ cls: 'comment-buttons' });
     }
 
     private createCommentsSection(item: HTMLElement, highlight: Highlight, options: HighlightRenderOptions): void {
@@ -315,9 +361,9 @@ export class HighlightRenderer {
         if (validFootnoteContents.length > 0) {
             const pairs = validFootnoteContents.map((content, index) => ({
                 content,
-                ts: (highlight.commentTimestamps && (highlight.commentTimestamps as number[])[index] != null)
-                    ? (highlight.commentTimestamps as number[])[index]
-                    : (highlight.createdAt || Date.now())
+                ts: ((highlight as any).commentTimestamps && (highlight as any).commentTimestamps[index] != null)
+                    ? (highlight as any).commentTimestamps[index]
+                    : undefined,
             }));
             // Final-stage de-duplication by normalized content (keep earliest timestamp)
             const normalize = (s: string) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -391,7 +437,7 @@ private createAddCommentLine(commentsContainer: HTMLElement, highlight: Highligh
         let node;
         const nodesToProcess: Text[] = [];
         
-        while (node = walker.nextNode()) {
+        while ((node = walker.nextNode() as Text | null)) {
             if (node.nodeValue && node.nodeValue.trim() !== '' && 
                 !(node.parentElement && node.parentElement.classList.contains('search-term-highlight'))) {
                 nodesToProcess.push(node as Text);

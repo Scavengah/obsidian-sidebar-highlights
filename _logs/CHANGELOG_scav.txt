@@ -9,3 +9,9 @@ To implement:
 - external links render raw in sidebar comments, see 445
 - comment categories, footnote, inline, comment anchor
 - footnote number prepended to sidebar comment
+
+
+
+
+
+2025-11-10 14:23:18 (ADD0001): Getting the sidebar to inherit the date-comment instead of the date-highlight. [COMMITTED 2025-11-10 19:02:09]
