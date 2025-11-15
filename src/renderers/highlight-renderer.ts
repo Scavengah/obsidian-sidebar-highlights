@@ -507,6 +507,19 @@ private createAddCommentLine(commentsContainer: HTMLElement, highlight: Highligh
                 linkEl.textContent = segment.text || '';
                 linkEl.href = segment.url || '';
                 linkEl.target = '_blank';
+            } else if (segment.type === 'wikilink') {
+                const linkEl = element.createEl('a');
+                linkEl.textContent = segment.text || segment.url || '';
+                linkEl.classList.add('internal-link');
+                
+                // Handle wiki-link click to open in Obsidian in a new tab
+                linkEl.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const linkPath = segment.url || '';
+                    // Always open in new tab/pane (newLeaf: true)
+                    this.plugin.app.workspace.openLinkText(linkPath, '', true);
+                });
             }
         }
     }
@@ -520,7 +533,8 @@ private createAddCommentLine(commentsContainer: HTMLElement, highlight: Highligh
             { regex: /__(.*?)__/g, type: 'strong' },
             { regex: /~~(.*?)~~/g, type: 'del' },
             { regex: /`([^`]+?)`/g, type: 'code' },
-            { regex: /\[([^\]]+)\]\(([^)]+)\)/g, type: 'link' }
+            { regex: /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, type: 'wikilink' }, // Wiki-links [[link|text]] or [[link]]
+            { regex: /\[([^\]]+)\]\(([^)]+)\)/g, type: 'link' } // Regular markdown links
         ];
         
         const matches: Array<{start: number, end: number, type: string, content?: string, text?: string, url?: string}> = [];
@@ -537,6 +551,15 @@ private createAddCommentLine(commentsContainer: HTMLElement, highlight: Highligh
                         type: pattern.type,
                         text: match[1],
                         url: match[2]
+                    });
+                } else if (pattern.type === 'wikilink') {
+                    // match[1] is the link path, match[2] is the optional display text
+                    matches.push({
+                        start: match.index,
+                        end: match.index + match[0].length,
+                        type: pattern.type,
+                        url: match[1],
+                        text: match[2] || match[1] // Use display text if provided, otherwise use link path
                     });
                 } else {
                     matches.push({
