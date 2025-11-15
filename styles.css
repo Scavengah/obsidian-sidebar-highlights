@@ -1874,3 +1874,17 @@ mark[class^="sbh-"] { padding: 0 0.15em; border-radius: 3px; }
 .highlight-comment-datetime, .highlight-comment-text { display:inline; vertical-align:baseline; }
 .highlight-comment-datetime { opacity:.7; margin-right:3px; font-size:inherit; font-family: var(--font-monospace); }
 .highlight-comment-text p { display:inline; margin:0; }
+
+/* Comment type icon */
+.highlight-comment-type-icon {
+    display: inline-flex;
+    width: 12px;
+    height: 12px;
+    margin-right: 4px;
+    opacity: 0.6;
+    vertical-align: baseline;
+}
+.highlight-comment-type-icon svg {
+    width: 12px;
+    height: 12px;
+}

@@ -1909,7 +1909,7 @@ private findAndParseHighlight(content: string, originalHighlight: Highlight, foo
     while ((match = baseRegex.exec(content)) !== null) {
         if (Math.abs(match.index - (originalHighlight.startOffset ?? 0)) < 100) {
             const after = content.slice(match.index + match[0].length);
-            const tokens: Array<{type: 'standard' | 'inline', index: number, content: string, ts?: number}> = [];
+            const tokens: Array<{type: 'standard' | 'inline' | 'anchor', index: number, content: string, ts?: number}> = [];
             
             let pos = 0;
             const inlineRe = /^\^\[([^\]]+)\]/;                 // inline footnote ^[...]
@@ -1921,8 +1921,12 @@ private findAndParseHighlight(content: string, originalHighlight: Highlight, foo
                 const ws = slice.match(/^\s+/);
                 if (ws) { pos += ws[0].length; continue; }
                 
+                // Debug: log what we're trying to match
+                console.log('Trying to match at pos', pos, 'slice start:', slice.substring(0, 50));
+                
                 const am = slice.match(anchorRe);
                 if (am) {
+                    console.log('Matched anchor:', am[0].substring(0, 80));
                     const tpl = document.createElement('template');
                     tpl.innerHTML = am[0] || '';
                     const el = tpl.content.querySelector('.comment-text') as HTMLElement | null;
@@ -1937,13 +1941,15 @@ private findAndParseHighlight(content: string, originalHighlight: Highlight, foo
                         const tsAttr = el?.getAttribute('data-comment-ts');
                         if (tsAttr) { const n = Number(tsAttr); if (!Number.isNaN(n)) ts = n; }
                     }
-                    if (txt) tokens.push({ type: 'inline', index: match.index + match[0].length + pos, content: txt, ts });
+                    console.log('Pushing anchor token with content:', txt.substring(0, 50));
+                    if (txt) tokens.push({ type: 'anchor', index: match.index + match[0].length + pos, content: txt, ts });
                     pos += am[0].length;
                     continue;
                 }
                 
                 const im = slice.match(inlineRe);
                 if (im) {
+                    console.log('Matched inline:', im[0]);
                     const txt = (im[1] || '').trim();
                     if (txt) tokens.push({ type: 'inline', index: match.index + match[0].length + pos, content: txt });
                     pos += im[0].length;
@@ -1952,6 +1958,7 @@ private findAndParseHighlight(content: string, originalHighlight: Highlight, foo
                 
                 const sm = slice.match(standardRe);
                 if (sm) {
+                    console.log('Matched standard:', sm[0], 'key:', sm[1]);
                     const key = sm[1];
                     const body = (footnoteMap.get(key) || '').trim();
                     if (body) tokens.push({ type: 'standard', index: match.index + match[0].length + pos, content: body });
@@ -1973,6 +1980,7 @@ private findAndParseHighlight(content: string, originalHighlight: Highlight, foo
             const dedup2 = dedup.filter(t => { const k = normalizeContent(t.content); if (seenContent.has(k)) return false; seenContent.add(k); return true; });
             const footnoteContents = dedup2.map(t => t.content);
             const commentTimestamps = dedup2.map(t => t.ts);
+            const commentTypes = dedup2.map(t => t.type);
             const footnoteCount = footnoteContents.length;
             
             const _openTag = (match[0].match(/<mark\b[^>]*>/i)?.[0] || '');
@@ -1984,7 +1992,7 @@ private findAndParseHighlight(content: string, originalHighlight: Highlight, foo
                 const hh = Number(_dh.slice(9,11)), mm = Number(_dh.slice(11,13)), ss = Number(_dh.slice(13,15));
                 _createdAt = new Date(y, mo, d, hh, mm, ss).getTime();
             } else if (_dhts) { const n = Number(_dhts); if (!Number.isNaN(n)) _createdAt = n; }
-            return { ...originalHighlight, footnoteContents, commentTimestamps, footnoteCount, startOffset: match.index, endOffset: match.index + match[0].length };
+            return { ...originalHighlight, footnoteContents, commentTimestamps, commentTypes, footnoteCount, startOffset: match.index, endOffset: match.index + match[0].length };
         }
     }
     return null;

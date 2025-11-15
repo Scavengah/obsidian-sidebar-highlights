@@ -49,6 +49,7 @@ export interface Highlight {
     footnoteCount?: number;
     footnoteContents?: string[];
     commentTimestamps?: number[]; // Timestamps for each comment/footnote
+    commentTypes?: ('inline' | 'standard' | 'anchor')[]; // Type of each comment/footnote
     color?: string;
     collectionIds?: string[]; // Add collection support
     createdAt?: number; // Timestamp when highlight was created
@@ -376,8 +377,11 @@ this.addCommand({
         this.app.workspace.onLayoutReady(async () => {
             // Fix any duplicate timestamps from previous versions
             await this.fixDuplicateTimestamps();
-            
+
             this.scanAllFilesForHighlights();
+            
+            // Check if we need to re-scan to populate commentTypes for existing highlights
+            await this.checkAndRescanForCommentTypes();
             
             // Ensure custom color styles are applied on load
             this.updateCustomColorStyles();
@@ -1181,6 +1185,27 @@ this.addCommand({
         if (hasChanges) {
             await this.saveSettings();
             this.refreshSidebar();
+        }
+    }
+    
+    async checkAndRescanForCommentTypes() {
+        // Check if any highlights are missing commentTypes data
+        let needsRescan = false;
+        for (const [filePath, highlights] of this.highlights) {
+            for (const highlight of highlights) {
+                if (highlight.footnoteContents && highlight.footnoteContents.length > 0 && !highlight.commentTypes) {
+                    needsRescan = true;
+                    break;
+                }
+            }
+            if (needsRescan) break;
+        }
+        
+        if (needsRescan) {
+            console.log('Sidebar Highlights: Detected highlights without comment types, re-scanning...');
+            // Clear all highlights to force a fresh scan
+            this.highlights.clear();
+            await this.scanAllFilesForHighlights();
         }
     }
 

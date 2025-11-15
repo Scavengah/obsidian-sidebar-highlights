@@ -364,15 +364,18 @@ export class HighlightRenderer {
                 ts: ((highlight as any).commentTimestamps && (highlight as any).commentTimestamps[index] != null)
                     ? (highlight as any).commentTimestamps[index]
                     : undefined,
+                type: ((highlight as any).commentTypes && (highlight as any).commentTypes[index])
+                    ? (highlight as any).commentTypes[index]
+                    : 'inline', // Default to inline if not specified
             }));
             // Final-stage de-duplication by normalized content (keep earliest timestamp)
             const normalize = (s: string) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
-            const uniqMap = new Map<string, { content: string, ts: number | undefined }>();
+            const uniqMap = new Map<string, { content: string, ts: number | undefined, type: string }>();
             for (const p of pairs) {
                 const k = normalize(p.content);
                 const prev = uniqMap.get(k);
                 if (!prev || ((p.ts ?? Infinity) < (prev.ts ?? Infinity))) {
-                    uniqMap.set(k, { content: p.content, ts: p.ts });
+                    uniqMap.set(k, { content: p.content, ts: p.ts, type: p.type });
                 }
             }
             const uniq = Array.from(uniqMap.values());
@@ -381,12 +384,24 @@ export class HighlightRenderer {
                 const tsB = b.ts ?? Infinity;
                 return tsA - tsB;
             });
-            uniq.forEach(({ content, ts }, index) => {
+            uniq.forEach(({ content, ts, type }, index) => {
                 
                 const commentDiv = commentsContainer.createDiv({ cls: 'highlight-comment' });
                 const body = commentDiv.createDiv({ cls: 'highlight-comment-body' });
                 const line = body.createDiv({ cls: 'highlight-comment-line' });
                 if (options.showTimestamp) {
+                    // Add icon based on comment type
+                    const iconSpan = line.createSpan({ cls: 'highlight-comment-type-icon' });
+                    
+                    // Debug: log the type to console
+                    console.log('Comment type:', type, 'Content:', content.substring(0, 50));
+                    
+                    if (type === 'anchor') {
+                        setIcon(iconSpan, 'message-square'); // Span comment icon
+                    } else {
+                        setIcon(iconSpan, 'file-text'); // Footnote icon (inline or standard)
+                    }
+                    
                     const millis = ts;
                     const tsText = options.dateFormat
                         ? moment(millis).format(options.dateFormat)
