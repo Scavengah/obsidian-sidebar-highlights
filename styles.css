@@ -1320,6 +1320,7 @@ body.theme-highlight-green .cm-highlight {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-family: var(--font-monospace);
 }
 
 /* Dropdown menu styling */
@@ -1844,8 +1845,29 @@ mark[class^="sbh-"] { padding: 0 0.15em; border-radius: 3px; }
 .highlight-add-row .highlight-add-comment-line { padding:6px 10px; border-radius:8px; border:1px solid var(--background-modifier-border); background-color: var(--background-primary-alt); }
 .highlight-add-row .highlight-add-comment-line:hover { background-color: var(--background-modifier-hover); }
 
+/* Icon-only add comment button - centered and compact */
+.highlight-add-comment-icon-only {
+    flex: 0 0 auto;
+    padding: 4px !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    margin-top: 5px;
+}
+
+.highlight-add-comment-icon-only .highlight-add-comment-icon {
+    width: 15px;
+    height: 15px;
+}
+
+.highlight-add-comment-icon-only .highlight-add-comment-icon svg {
+    width: 15px;
+    height: 15px;
+}
+
 /* Inline timestamp flowing with paragraph */
 .highlight-comment-line { display:inline; }
 .highlight-comment-datetime, .highlight-comment-text { display:inline; vertical-align:baseline; }
-.highlight-comment-datetime { opacity:.7; margin-right:6px; font-size:inherit; }
+.highlight-comment-datetime { opacity:.7; margin-right:6px; font-size:inherit; font-family: var(--font-monospace); }
 .highlight-comment-text p { display:inline; margin:0; }

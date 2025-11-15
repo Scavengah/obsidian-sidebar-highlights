@@ -307,7 +307,7 @@ export class HighlightRenderer {
         const timestamp = moment(baseTs);
         const timeString = options.dateFormat
             ? timestamp.format(options.dateFormat)
-            : timestamp.format('YYYY-MM-DD HH:mm');
+            : timestamp.format('YYYY-MM-DD HH:mm:ss');
 
         const timestampContainer = infoLineContainer.createDiv({
             cls: 'highlight-timestamp-container',
@@ -376,7 +376,11 @@ export class HighlightRenderer {
                 }
             }
             const uniq = Array.from(uniqMap.values());
-            uniq.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+            uniq.sort((a, b) => {
+                const tsA = a.ts ?? Infinity;
+                const tsB = b.ts ?? Infinity;
+                return tsA - tsB;
+            });
             uniq.forEach(({ content, ts }, index) => {
                 
                 const commentDiv = commentsContainer.createDiv({ cls: 'highlight-comment' });
@@ -386,7 +390,7 @@ export class HighlightRenderer {
                     const millis = ts;
                     const tsText = options.dateFormat
                         ? moment(millis).format(options.dateFormat)
-                        : moment(millis).format('YYYY-MM-DD HH:mm');
+                        : moment(millis).format('YYYY-MM-DD HH:mm:ss');
                     line.createSpan({ cls: 'highlight-comment-datetime', text: tsText + ': ' });
                 }
                 const commentTextEl = line.createDiv({ cls: 'highlight-comment-text' });
@@ -407,23 +411,13 @@ export class HighlightRenderer {
     
 private createAddCommentLine(commentsContainer: HTMLElement, highlight: Highlight, options: HighlightRenderOptions): void {
     const row = commentsContainer.createDiv({ cls: 'highlight-add-row' });
-    // Add span comment
-    const addMark = row.createDiv({ cls: 'highlight-add-comment-line' });
-    const markIcon = addMark.createDiv({ cls: 'highlight-add-comment-icon' });
-    setIcon(markIcon, 'plus');
-    addMark.createSpan({ text: 'Add span comment' });
-    addMark.addEventListener('click', (event) => {
+    // Add span comment - just icon
+    const addSpan = row.createDiv({ cls: 'highlight-add-comment-line highlight-add-comment-icon-only' });
+    const spanIcon = addSpan.createDiv({ cls: 'highlight-add-comment-icon' });
+    setIcon(spanIcon, 'message-square-plus');
+    addSpan.addEventListener('click', (event) => {
         event.stopPropagation();
         (options.onAddMarkComment ?? options.onAddComment)?.(highlight);
-    });
-    // Add footnote comment
-    const addFoot = row.createDiv({ cls: 'highlight-add-comment-line' });
-    const footIcon = addFoot.createDiv({ cls: 'highlight-add-comment-icon' });
-    setIcon(footIcon, 'plus');
-    addFoot.createSpan({ text: 'Add footnote comment' });
-    addFoot.addEventListener('click', (event) => {
-        event.stopPropagation();
-        (options.onAddFootnoteComment ?? options.onAddComment)?.(highlight);
     });
 }
 
