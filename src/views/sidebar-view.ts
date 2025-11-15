@@ -1564,21 +1564,8 @@ export class HighlightsSidebarView extends ItemView {
                 this.addFootnoteToHighlightWithTargetedUpdate(highlight);
             },
             onCommentClick: (highlight, commentIndex, event) => {
-                // Find the original index in highlight.footnoteContents
-                let originalIndex = -1;
-                let validIndexCounter = 0;
-                for(let i = 0; i < (highlight.footnoteContents?.length || 0); i++) {
-                    if (highlight.footnoteContents![i].trim() !== '') {
-                        if (validIndexCounter === commentIndex) {
-                            originalIndex = i;
-                            break;
-                        }
-                        validIndexCounter++;
-                    }
-                }
-                if (originalIndex !== -1) {
-                    this.focusFootnoteInEditor(highlight, originalIndex, event);
-                }
+                // Navigate to the parent highlight, not the comment
+                this.focusHighlightInEditor(highlight, event);
             },
             onTagClick: (tag) => {
                 if (this.selectedTags.has(tag)) {

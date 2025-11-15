@@ -628,13 +628,15 @@ body.theme-highlight-green .cm-highlight {
 
 .highlight-quote {
     color: var(--text-normal);
-    padding: 10px 15px; 
-    margin-bottom: 0; 
-    border-radius: 0 6px 0 0; 
+    padding: 10px 15px;
+    margin-bottom: 0;
+    border-radius: 0 6px 0 0;
     cursor: pointer;
-    font-size: inherit; 
+    font-size: inherit;
     line-height: var(--line-height-normal);
     transition: background-color 0.2s ease;
+    user-select: text;
+    -webkit-user-select: text;
 }
 
 .highlight-quote:hover {
@@ -714,6 +716,8 @@ body.theme-highlight-green .cm-highlight {
     padding: 6px 15px;
     transition: background-color 0.15s ease, color 0.15s ease;
     border-bottom: 0.5px solid var(--background-modifier-border);
+    user-select: text;
+    -webkit-user-select: text;
 }
 
 .highlight-comment:last-child {
@@ -1574,11 +1578,10 @@ body.theme-highlight-green .cm-highlight {
 .hover-color-picker { z-index: 20; }
 .hover-color-option { border-radius: 4px; }
 
-/* 9) Prevent accidental text selection on control rows */
+/* 9) Prevent accidental text selection on control rows (but allow in comments) */
 .highlight-actions,
 .highlight-info-line,
-.highlight-add-comment-line,
-.highlight-comments {
+.highlight-add-comment-line {
   -webkit-user-select: none;
   user-select: none;
 }
