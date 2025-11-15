@@ -1623,46 +1623,6 @@ this.addCommand({
             
             
             
-// Attach any number of adjacent comment anchors (0–1 space tolerance between each)
-if (type === 'highlight' || type === 'html') {
-    const endOfThisHighlight = match.index + match[0].length;
-    let pos = 0;
-    const after = content.slice(endOfThisHighlight);
-    const anchorRe = new RegExp(
-        String.raw`^(?:\s{0,1})<span\s+class=["']comment-anchor["'][^>]*>\s*<span\s+class=["']comment-text["']([^>]*)>([\s\S]*?)<\/span>\s*<\/span>`,
-        'i'
-    );
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-        const slice = after.slice(pos);
-        const mAnchor = slice.match(anchorRe);
-        if (!mAnchor) break;
-        const leadingSpace = slice.startsWith(' ') ? 1 : 0;
-        const absoluteStart = endOfThisHighlight + pos;
-        const anchorStart = absoluteStart + leadingSpace;
-        const anchorEnd = anchorStart + mAnchor[0].length;
-        const tpl = document.createElement('template');
-        tpl.innerHTML = mAnchor[2] || '';
-        const anchorText = (tpl.content.textContent || '').replace(/\s+/g, ' ').trim();
-        if (anchorText) {
-            (footnoteContents ??= []).push(anchorText);
-            footnoteCount = (footnoteCount ?? 0) + 1;
-            // Parse date-comment attribute
-            const dateCommentMatch = mAnchor[1].match(/date-comment\s*=\s*["'](\d{8}-\d{6})["']/i);
-            if (dateCommentMatch) {
-                const dc = dateCommentMatch[1];
-                const y = Number(dc.slice(0,4)), mo = Number(dc.slice(4,6))-1, d = Number(dc.slice(6,8));
-                const hh = Number(dc.slice(9,11)), mm = Number(dc.slice(11,13)), ss = Number(dc.slice(13,15));
-                const timestamp = new Date(y, mo, d, hh, mm, ss).getTime();
-                (commentTimestamps ??= []).push(timestamp);
-            }
-            consumedAnchorStarts.add(anchorStart);
-            consumedAnchorRanges.push([anchorStart, anchorEnd]);
-        }
-        pos += leadingSpace + mAnchor[0].length;
-    }
-}
-
 // Skip matches that land inside an already-consumed <span class="comment-anchor">…</span>
 const __inConsumedAnchor = consumedAnchorRanges.some(([a, b]) => match.index >= a && match.index < b);
 if (__inConsumedAnchor) {
