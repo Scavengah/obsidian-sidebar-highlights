@@ -237,10 +237,18 @@ async onload() {
 // --- Insert hover-comment-tooltip anchor ---
 this.addCommand({
     id: 'insert-hover-comment-anchor',
-    name: 'Insert Comment Anchor (<span class="comment-anchor">…</span>)',
+    name: 'Insert Span Comment',
     editorCallback: (editor: Editor) => {
-        const snippet = `<span class="comment-anchor"><span class="comment-text">CommentPlaceHolder</span></span>`;
+        const now = new Date();
+        const tsStr = `${now.getFullYear()}${('0'+(now.getMonth()+1)).slice(-2)}${('0'+now.getDate()).slice(-2)}-${('0'+now.getHours()).slice(-2)}${('0'+now.getMinutes()).slice(-2)}${('0'+now.getSeconds()).slice(-2)}`;
+        const snippet = `<span class="comment-anchor"><span class="comment-text" date-comment="${tsStr}">Comment</span></span>`;
         editor.replaceSelection(snippet);
+        
+        // Select the "Comment" text for easy editing
+        const cursor = editor.getCursor();
+        const from = { line: cursor.line, ch: cursor.ch - '</span></span>'.length - 'Comment'.length };
+        const to = { line: cursor.line, ch: cursor.ch - '</span></span>'.length };
+        editor.setSelection(from, to);
     }
 });
 

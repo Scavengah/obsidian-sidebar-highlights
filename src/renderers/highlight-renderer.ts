@@ -407,11 +407,11 @@ export class HighlightRenderer {
     
 private createAddCommentLine(commentsContainer: HTMLElement, highlight: Highlight, options: HighlightRenderOptions): void {
     const row = commentsContainer.createDiv({ cls: 'highlight-add-row' });
-    // Add mark comment
+    // Add span comment
     const addMark = row.createDiv({ cls: 'highlight-add-comment-line' });
     const markIcon = addMark.createDiv({ cls: 'highlight-add-comment-icon' });
     setIcon(markIcon, 'plus');
-    addMark.createSpan({ text: 'Add mark comment' });
+    addMark.createSpan({ text: 'Add span comment' });
     addMark.addEventListener('click', (event) => {
         event.stopPropagation();
         (options.onAddMarkComment ?? options.onAddComment)?.(highlight);
