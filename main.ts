@@ -13,7 +13,7 @@ class MarkPaletteModal extends SuggestModal<{ name: string; ui: string; doc: str
             doc: c.doc || c.ui || '#cccccc',
         }));
         const q = (query || '').toLowerCase().trim();
-        return list.filter(x => x.name.toLowerCase().includes(q));
+        return list.filter((x: { name: string; ui: string; doc: string }) => x.name.toLowerCase().includes(q));
     }
     renderSuggestion(value: { name: string; ui: string; doc: string }, el: HTMLElement) {
         el.addClass('mod-search-suggestion');
@@ -32,7 +32,7 @@ class MarkPaletteModal extends SuggestModal<{ name: string; ui: string; doc: str
 }
 
 // main.ts
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf, debounce , SuggestModal} from 'obsidian';
+import { App, Editor, MarkdownView, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf, SuggestModal} from 'obsidian';
 import { HighlightsSidebarView } from './src/views/sidebar-view';
 import { InlineFootnoteManager } from './src/managers/inline-footnote-manager';
 import { registerHoverCommentTooltip } from './src/managers/hover-comment-tooltip';
@@ -1298,7 +1298,7 @@ this.addCommand({
 
 
 
-    detectAndStoreMarkdownHighlights(content: string, file: TFile, shouldRefresh: boolean = true) {
+    detectAndStoreMarkdownHighlights(content: string, file: TFile, shouldRefresh = true) {
         const markdownHighlightRegex = /==([^=\n](?:[^=\n]|=[^=\n])*?[^=\n])==/g;
         const commentHighlightRegex = /%%([^%](?:[^%]|%[^%])*?)%%/g;
         
@@ -1316,7 +1316,7 @@ this.addCommand({
         // Create a more robust matching system that considers text, position, and type
         const findExistingHighlight = (text: string, startOffset: number, endOffset: number, isComment: boolean): Highlight | undefined => {
             // First, try exact position match
-            let exactMatch = existingHighlightsForFile.find(h => 
+            const exactMatch = existingHighlightsForFile.find(h => 
                 !usedExistingHighlights.has(h.id) &&
                 h.text === text && 
                 h.startOffset === startOffset && 
@@ -1329,7 +1329,7 @@ this.addCommand({
             }
             
             // If no exact match, try fuzzy position match (within 50 characters)
-            let fuzzyMatch = existingHighlightsForFile.find(h => 
+            const fuzzyMatch = existingHighlightsForFile.find(h => 
                 !usedExistingHighlights.has(h.id) &&
                 h.text === text && 
                 Math.abs(h.startOffset - startOffset) <= 50 &&
@@ -1341,7 +1341,7 @@ this.addCommand({
             }
             
             // If still no match, try text-only match for highlights that might have moved significantly
-            let textMatch = existingHighlightsForFile.find(h => 
+            const textMatch = existingHighlightsForFile.find(h => 
                 !usedExistingHighlights.has(h.id) &&
                 h.text === text && 
                 h.isNativeComment === isComment &&
@@ -1364,7 +1364,7 @@ this.addCommand({
         const codeBlockRanges = this.getCodeBlockRanges(content);
 
         // Process all highlight types
-        const allMatches: Array<{match: RegExpExecArray, type: 'highlight' | 'comment' | 'html', color?: string}> = [];
+        const allMatches: Array<{match: RegExpExecArray, type: 'highlight' | 'comment' | 'html', color?: string, cls?: string}> = [];
         
         // Find all highlight matches
         let match;
@@ -1616,7 +1616,6 @@ this.addCommand({
                 footnoteCount = footnoteContents.length;
                 
             } else if (type === 'comment') {
-} else if (type === 'comment') {
                 // For comments, the text itself IS the comment content
                 footnoteContents = [highlightText];
                 footnoteCount = 1;
@@ -1633,6 +1632,7 @@ if (type === 'highlight' || type === 'html') {
         String.raw`^(?:\s{0,1})<span\s+class=["']comment-anchor["'][^>]*>\s*<span\s+class=["']comment-text["']([^>]*)>([\s\S]*?)<\/span>\s*<\/span>`,
         'i'
     );
+    // eslint-disable-next-line no-constant-condition
     while (true) {
         const slice = after.slice(pos);
         const mAnchor = slice.match(anchorRe);
@@ -1666,7 +1666,7 @@ if (type === 'highlight' || type === 'html') {
 // Skip matches that land inside an already-consumed <span class="comment-anchor">…</span>
 const __inConsumedAnchor = consumedAnchorRanges.some(([a, b]) => match.index >= a && match.index < b);
 if (__inConsumedAnchor) {
-    // do nothing - this match is part of an anchor we already attached
+    // This match is part of an anchor we already attached
 } else if (existingHighlight) {
                 newHighlights.push({
                     ...existingHighlight,
@@ -1695,7 +1695,9 @@ if (__inConsumedAnchor) {
                                     const n = Number(dts); if (!Number.isNaN(n)) return n;
                                 }
                             }
-                        } catch {}
+                        } catch {
+                            // Error parsing timestamp
+                        }
                         return existingHighlight.createdAt || Date.now();
                     })(),
                     // Store the type for proper identification
@@ -1731,7 +1733,9 @@ if (__inConsumedAnchor) {
                                     const n = Number(dts); if (!Number.isNaN(n)) return n;
                                 }
                             }
-                        } catch {}
+                        } catch {
+                            // Error parsing timestamp
+                        }
                         return uniqueTimestamp;
                     })(),
                     isNativeComment: type === 'comment',
