@@ -37,6 +37,10 @@ export class HighlightsSidebarView extends ItemView {
     private itemsPerPage: number = 100;
     private totalHighlights: Highlight[] = [];
     private isPreservingPagination: boolean = false;
+
+    public setPreservePagination(preserve: boolean): void {
+        this.isPreservingPagination = preserve;
+    }
     
     // Pagination for grouped highlights
     private currentGroupPage: number = 0;

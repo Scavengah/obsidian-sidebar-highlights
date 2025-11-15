@@ -648,6 +648,12 @@ this.addCommand({
 
         const highlightedText = `==${selection}==`;
         editor.replaceSelection(highlightedText);
+        
+        // Preserve scroll position when creating highlights
+        if (this.sidebarView) {
+            this.sidebarView.setPreservePagination(true);
+        }
+        
         this.refreshSidebar();
         new Notice('Highlight created');
     }

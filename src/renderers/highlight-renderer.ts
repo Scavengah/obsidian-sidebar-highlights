@@ -472,13 +472,25 @@ private createAddCommentLine(commentsContainer: HTMLElement, highlight: Highligh
     private renderMarkdownToElement(element: HTMLElement, text: string): void {
         element.empty(); // Clear existing content
         
+        // Pre-process >> or > > (with or without space) to single line break
+        // Handle both >> and > > formats
+        const processedText = text.replace(/>\s*>/g, '\n');
+        
         // Process markdown patterns safely (no HTML escaping needed since textContent handles it)
-        const segments = this.parseMarkdownSegments(text);
+        const segments = this.parseMarkdownSegments(processedText);
         
         for (const segment of segments) {
             if (segment.type === 'text') {
-                element.appendText(segment.content || '');
-            } else if (segment.type === 'strong') {
+                // Handle line breaks in text segments
+                const lines = (segment.content || '').split('\n');
+                for (let i = 0; i < lines.length; i++) {
+                    if (i > 0) {
+                        element.createEl('br');
+                    }
+                    // Always append text, even if empty, to preserve spacing
+                    element.appendText(lines[i]);
+                }
+            }else if (segment.type === 'strong') {
                 const strongEl = element.createEl('strong');
                 strongEl.textContent = segment.content || '';
             } else if (segment.type === 'em') {
