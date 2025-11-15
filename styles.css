@@ -1872,5 +1872,5 @@ mark[class^="sbh-"] { padding: 0 0.15em; border-radius: 3px; }
 /* Inline timestamp flowing with paragraph */
 .highlight-comment-line { display:inline; }
 .highlight-comment-datetime, .highlight-comment-text { display:inline; vertical-align:baseline; }
-.highlight-comment-datetime { opacity:.7; margin-right:6px; font-size:inherit; font-family: var(--font-monospace); }
+.highlight-comment-datetime { opacity:.7; margin-right:3px; font-size:inherit; font-family: var(--font-monospace); }
 .highlight-comment-text p { display:inline; margin:0; }

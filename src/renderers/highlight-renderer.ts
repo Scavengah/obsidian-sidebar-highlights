@@ -391,7 +391,7 @@ export class HighlightRenderer {
                     const tsText = options.dateFormat
                         ? moment(millis).format(options.dateFormat)
                         : moment(millis).format('YYYY-MM-DD HH:mm:ss');
-                    line.createSpan({ cls: 'highlight-comment-datetime', text: tsText + ': ' });
+                    line.createSpan({ cls: 'highlight-comment-datetime', text: tsText + ':' });
                 }
                 const commentTextEl = line.createDiv({ cls: 'highlight-comment-text' });
                 this.renderMarkdownToElement(commentTextEl, content);
