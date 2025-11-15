@@ -125,7 +125,7 @@ const DEFAULT_SETTINGS: CommentPluginSettings = {
     selectTextOnCommentClick: false, // Position to highlight by default
     excludeExcalidraw: true, // Exclude .excalidraw files by default
     excludedFiles: [], // Empty array by default
-    dateFormat: 'YYYY-MM-DD HH:mm', // Default date format
+    dateFormat: 'YYYYMMDD-HHmmss', // Default date format
     minimumCharacterCount: 0, // Default minimum character count (0 = show all)
     highlightFontSize: 11, // Default highlight text font size
     detailsFontSize: 11, // Default details font size

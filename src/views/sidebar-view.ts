@@ -1103,9 +1103,9 @@ export class HighlightsSidebarView extends ItemView {
                     const timeB = b.createdAt || 0;
                     
                     if (this.groupingMode === 'date-created-asc') {
-                        return timeA - timeB; // Earlier times first
+                        return timeA - timeB; // Earlier times first (oldest first)
                     } else {
-                        return timeB - timeA; // Later times first
+                        return timeB - timeA; // Later times first (newest first)
                     }
                 });
             } else {
@@ -2692,9 +2692,9 @@ private renderGroupedHighlights(highlights: Highlight[], searchTerm?: string, sh
                 const dateB = new Date(b);
                 
                 if (this.groupingMode === 'date-created-asc') {
-                    return dateA.getTime() - dateB.getTime();
+                    return dateA.getTime() - dateB.getTime(); // Oldest groups first
                 } else {
-                    return dateB.getTime() - dateA.getTime();
+                    return dateB.getTime() - dateA.getTime(); // Newest groups first
                 }
             }
             return a.localeCompare(b);
@@ -2780,9 +2780,9 @@ private renderGroupedHighlights(highlights: Highlight[], searchTerm?: string, sh
                     const timeB = b.createdAt || 0;
                     
                     if (this.groupingMode === 'date-created-asc') {
-                        return timeA - timeB; // Earlier times first
+                        return timeA - timeB; // Earlier times first (oldest first)
                     } else {
-                        return timeB - timeA; // Later times first
+                        return timeB - timeA; // Later times first (newest first)
                     }
                 });
             } else {
