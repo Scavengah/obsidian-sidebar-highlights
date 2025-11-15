@@ -48,6 +48,7 @@ export interface Highlight {
     filePath: string;
     footnoteCount?: number;
     footnoteContents?: string[];
+    commentTimestamps?: number[]; // Timestamps for each comment/footnote
     color?: string;
     collectionIds?: string[]; // Add collection support
     createdAt?: number; // Timestamp when highlight was created
@@ -106,7 +107,7 @@ export interface CommentPluginSettings {
         blue: string;
         green: string;
     };
-    extraColors: Array<{ ui: string; doc: string; name: string; linked?: boolean }>;
+    extraColors?: Array<{ ui: string; doc: string; name: string; linked?: boolean }>;
 }
 
 const DEFAULT_SETTINGS: CommentPluginSettings = {
@@ -1117,13 +1118,41 @@ this.addCommand({
                 this.detectAndStoreMarkdownHighlights(content, file, false); // Don't refresh sidebar for each file
                 const newHighlights = this.highlights.get(file.path) || [];
                 
-                // Check if any highlights were found or changed (more thorough than just count)
-                const oldHighlightsJSON = JSON.stringify(oldHighlights.map(h => ({id: h.id, text: h.text, start: h.startOffset, end: h.endOffset, footnotes: h.footnoteCount})));
-                const newHighlightsJSON = JSON.stringify(newHighlights.map(h => ({id: h.id, text: h.text, start: h.startOffset, end: h.endOffset, footnotes: h.footnoteCount})));
-                
+                                // Check if any highlights were found or changed (more thorough than just count)
+                const normalizeHighlightForComparison = (h: Highlight & { commentTimestamps?: unknown }) => ({
+                    id: h.id,
+                    start: h.startOffset,
+                    end: h.endOffset,
+                    text: h.text,
+                    footnotes: h.footnoteCount,
+                    contents: (h.footnoteContents ?? [])
+                        .filter(c => c.trim() !== '')
+                        .join('\n'),
+                    color: h.color,
+                    isNativeComment: h.isNativeComment,
+                    createdAt:
+                        typeof h.createdAt === 'number' && !Number.isNaN(h.createdAt)
+                            ? h.createdAt
+                            : null,
+                    commentTimestamps: Array.isArray((h as any).commentTimestamps)
+                        ? (h as any).commentTimestamps.filter(
+                              (ts: unknown): ts is number =>
+                                  typeof ts === 'number' && !Number.isNaN(ts),
+                          )
+                        : [],
+                });
+
+                const oldHighlightsJSON = JSON.stringify(
+                    oldHighlights.map(normalizeHighlightForComparison),
+                );
+                const newHighlightsJSON = JSON.stringify(
+                    newHighlights.map(normalizeHighlightForComparison),
+                );
+
                 if (oldHighlightsJSON !== newHighlightsJSON) {
                     hasChanges = true;
                 }
+
             } catch (error) {
                 // Continue on error
             }
@@ -1495,18 +1524,19 @@ this.addCommand({
             
             let footnoteContents: string[] = [];
             let footnoteCount = 0;
+            let commentTimestamps: number[] = [];
 
             
             if (type === 'highlight' || type === 'html') {
                 // Unified scanner: consume a contiguous run of (whitespace | inline footnote | standard footnote | comment-anchor)
                 // in the order they appear immediately after the highlight.
                 const afterHighlight = content.substring(match.index + match[0].length);
-                const allFootnotes: Array<{type: 'standard' | 'inline', index: number, content: string}> = [];
+                const allFootnotes: Array<{type: 'standard' | 'inline', index: number, content: string, timestamp?: number}> = [];
                 
                 let pos = 0;
                 const inlineRe = /^\s*\^\[([^\]]+)\]/; // inline footnote token
                 const standardRe = /^\s*\[\^([a-zA-Z0-9_-]+)\](?!:)/; // standard footnote token (not definition)
-                const anchorRe = /^\s*<span\s+class=["']comment-anchor["'][^>]*>\s*<span\s+class=["']comment-text["'][^>]*>([\s\S]*?)<\/span>\s*<\/span>/i;
+                const anchorRe = /^\s*<span\s+class=["']comment-anchor["'][^>]*>\s*<span\s+class=["']comment-text["']([^>]*)>([\s\S]*?)<\/span>\s*<\/span>/i;
                 
                 scanLoop: while (pos < afterHighlight.length) {
                     const slice = afterHighlight.slice(pos);
@@ -1524,10 +1554,19 @@ this.addCommand({
                         const anchorStart = match.index + match[0].length + pos;
                         const anchorEnd = anchorStart + am[0].length;
                         const tpl = document.createElement('template');
-                        tpl.innerHTML = am[1] || '';
+                        tpl.innerHTML = am[2] || '';
                         const anchorText = (tpl.content.textContent || '').replace(/\s+/g, ' ').trim();
                         if (anchorText) {
-                            allFootnotes.push({ type: 'inline', index: anchorStart, content: anchorText });
+                            // Parse date-comment attribute
+                            let timestamp: number | undefined;
+                            const dateCommentMatch = am[1].match(/date-comment\s*=\s*["'](\d{8}-\d{6})["']/i);
+                            if (dateCommentMatch) {
+                                const dc = dateCommentMatch[1];
+                                const y = Number(dc.slice(0,4)), mo = Number(dc.slice(4,6))-1, d = Number(dc.slice(6,8));
+                                const hh = Number(dc.slice(9,11)), mm = Number(dc.slice(11,13)), ss = Number(dc.slice(13,15));
+                                timestamp = new Date(y, mo, d, hh, mm, ss).getTime();
+                            }
+                            allFootnotes.push({ type: 'inline', index: anchorStart, content: anchorText, timestamp });
                             consumedAnchorStarts.add(anchorStart);
                             consumedAnchorRanges.push([anchorStart, anchorEnd]);
                         }
@@ -1563,7 +1602,7 @@ this.addCommand({
                     break scanLoop; // Next token is not an anchor/footnote; stop scanning
                 }
                 
-                // Extract content in encountered order
+                // Extract content and timestamps in encountered order
                 allFootnotes.sort((a, b) => a.index - b.index);
                 const dedup: typeof allFootnotes = [];
                 const seen = new Set<number>();
@@ -1573,6 +1612,7 @@ this.addCommand({
                 const seenContent = new Set<string>();
                 const dedup2 = dedup.filter(f => { const k = (f.content || '').trim(); if (seenContent.has(k)) return false; seenContent.add(k); return true; });
                 footnoteContents = dedup2.map(f => f.content);
+                commentTimestamps = dedup2.map(f => f.timestamp).filter((ts): ts is number => ts !== undefined);
                 footnoteCount = footnoteContents.length;
                 
             } else if (type === 'comment') {
@@ -1590,7 +1630,7 @@ if (type === 'highlight' || type === 'html') {
     let pos = 0;
     const after = content.slice(endOfThisHighlight);
     const anchorRe = new RegExp(
-        String.raw`^(?:\s{0,1})<span\s+class=["']comment-anchor["'][^>]*>\s*<span\s+class=["']comment-text["'][^>]*>([\s\S]*?)<\/span>\s*<\/span>`,
+        String.raw`^(?:\s{0,1})<span\s+class=["']comment-anchor["'][^>]*>\s*<span\s+class=["']comment-text["']([^>]*)>([\s\S]*?)<\/span>\s*<\/span>`,
         'i'
     );
     while (true) {
@@ -1602,11 +1642,20 @@ if (type === 'highlight' || type === 'html') {
         const anchorStart = absoluteStart + leadingSpace;
         const anchorEnd = anchorStart + mAnchor[0].length;
         const tpl = document.createElement('template');
-        tpl.innerHTML = mAnchor[1] || '';
+        tpl.innerHTML = mAnchor[2] || '';
         const anchorText = (tpl.content.textContent || '').replace(/\s+/g, ' ').trim();
         if (anchorText) {
             (footnoteContents ??= []).push(anchorText);
             footnoteCount = (footnoteCount ?? 0) + 1;
+            // Parse date-comment attribute
+            const dateCommentMatch = mAnchor[1].match(/date-comment\s*=\s*["'](\d{8}-\d{6})["']/i);
+            if (dateCommentMatch) {
+                const dc = dateCommentMatch[1];
+                const y = Number(dc.slice(0,4)), mo = Number(dc.slice(4,6))-1, d = Number(dc.slice(6,8));
+                const hh = Number(dc.slice(9,11)), mm = Number(dc.slice(11,13)), ss = Number(dc.slice(13,15));
+                const timestamp = new Date(y, mo, d, hh, mm, ss).getTime();
+                (commentTimestamps ??= []).push(timestamp);
+            }
             consumedAnchorStarts.add(anchorStart);
             consumedAnchorRanges.push([anchorStart, anchorEnd]);
         }
@@ -1627,6 +1676,7 @@ if (__inConsumedAnchor) {
                     filePath: file.path, // ensure filePath is current
                     footnoteCount: footnoteCount,
                     footnoteContents: footnoteContents,
+                    commentTimestamps: commentTimestamps.length > 0 ? commentTimestamps : existingHighlight.commentTimestamps,
                     isNativeComment: type === 'comment',
                     // Update color for HTML highlights, preserve existing for others
                     color: type === 'html' ? color : existingHighlight.color,
@@ -1666,6 +1716,7 @@ if (__inConsumedAnchor) {
                     filePath: file.path,
                     footnoteCount: footnoteCount,
                     footnoteContents: footnoteContents,
+                    commentTimestamps: commentTimestamps.length > 0 ? commentTimestamps : undefined,
                     createdAt: (function() {
                         try {
                             if (type === 'html') {
@@ -1724,17 +1775,45 @@ if (__inConsumedAnchor) {
             }
         }
 
-        // Check for actual changes before updating and refreshing
-        const oldHighlightsJSON = JSON.stringify(existingHighlightsForFile.map(h => ({id: h.id, start: h.startOffset, end: h.endOffset, text: h.text, footnotes: h.footnoteCount, contents: h.footnoteContents?.filter(c => c.trim() !== ''), color: h.color, isNativeComment: h.isNativeComment})));
-        const newHighlightsJSON = JSON.stringify(newHighlights.map(h => ({id: h.id, start: h.startOffset, end: h.endOffset, text: h.text, footnotes: h.footnoteCount, contents: h.footnoteContents?.filter(c => c.trim() !== ''), color: h.color, isNativeComment: h.isNativeComment})));
+                // Check for actual changes before updating and refreshing
+        const normalizeHighlightForComparison = (h: Highlight & { commentTimestamps?: unknown }) => ({
+            id: h.id,
+            start: h.startOffset,
+            end: h.endOffset,
+            text: h.text,
+            footnotes: h.footnoteCount,
+            contents: (h.footnoteContents ?? [])
+                .filter(c => c.trim() !== '')
+                .join('\n'),
+            color: h.color,
+            isNativeComment: h.isNativeComment,
+            createdAt:
+                typeof h.createdAt === 'number' && !Number.isNaN(h.createdAt)
+                    ? h.createdAt
+                    : null,
+            commentTimestamps: Array.isArray((h as any).commentTimestamps)
+                ? (h as any).commentTimestamps.filter(
+                      (ts: unknown): ts is number =>
+                          typeof ts === 'number' && !Number.isNaN(ts),
+                  )
+                : [],
+        });
+
+        const oldHighlightsJSON = JSON.stringify(
+            existingHighlightsForFile.map(normalizeHighlightForComparison),
+        );
+        const newHighlightsJSON = JSON.stringify(
+            newHighlights.map(normalizeHighlightForComparison),
+        );
 
         if (oldHighlightsJSON !== newHighlightsJSON) {
             this.highlights.set(file.path, newHighlights);
             if (shouldRefresh) {
-                this.saveSettings(); // Save to disk after detecting changes
+                this.saveSettings(); // Save to disk after detect
                 this.smartUpdateSidebar(existingHighlightsForFile, newHighlights);
             }
         }
+
     }
 
     /**
