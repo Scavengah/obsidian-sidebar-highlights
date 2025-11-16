@@ -1569,13 +1569,14 @@ this.addCommand({
             let footnoteContents: string[] = [];
             let footnoteCount = 0;
             let commentTimestamps: number[] = [];
+            let commentTypes: ('inline' | 'standard' | 'anchor')[] = [];
 
             
             if (type === 'highlight' || type === 'html') {
                 // Unified scanner: consume a contiguous run of (whitespace | inline footnote | standard footnote | comment-anchor)
                 // in the order they appear immediately after the highlight.
                 const afterHighlight = content.substring(match.index + match[0].length);
-                const allFootnotes: Array<{type: 'standard' | 'inline', index: number, content: string, timestamp?: number}> = [];
+                const allFootnotes: Array<{type: 'standard' | 'inline' | 'anchor', index: number, content: string, timestamp?: number}> = [];
                 
                 let pos = 0;
                 const inlineRe = /^\s*\^\[([^\]]+)\]/; // inline footnote token
@@ -1610,7 +1611,7 @@ this.addCommand({
                                 const hh = Number(dc.slice(9,11)), mm = Number(dc.slice(11,13)), ss = Number(dc.slice(13,15));
                                 timestamp = new Date(y, mo, d, hh, mm, ss).getTime();
                             }
-                            allFootnotes.push({ type: 'inline', index: anchorStart, content: anchorText, timestamp });
+                            allFootnotes.push({ type: 'anchor', index: anchorStart, content: anchorText, timestamp });
                             consumedAnchorStarts.add(anchorStart);
                             consumedAnchorRanges.push([anchorStart, anchorEnd]);
                         }
@@ -1657,6 +1658,7 @@ this.addCommand({
                 const dedup2 = dedup.filter(f => { const k = (f.content || '').trim(); if (seenContent.has(k)) return false; seenContent.add(k); return true; });
                 footnoteContents = dedup2.map(f => f.content);
                 commentTimestamps = dedup2.map(f => f.timestamp).filter((ts): ts is number => ts !== undefined);
+                commentTypes = dedup2.map(f => f.type);
                 footnoteCount = footnoteContents.length;
                 
             } else if (type === 'comment') {
@@ -1681,6 +1683,7 @@ if (__inConsumedAnchor) {
                     footnoteCount: footnoteCount,
                     footnoteContents: footnoteContents,
                     commentTimestamps: commentTimestamps.length > 0 ? commentTimestamps : existingHighlight.commentTimestamps,
+                    commentTypes: commentTypes.length > 0 ? commentTypes : existingHighlight.commentTypes,
                     isNativeComment: type === 'comment',
                     // Update color for HTML highlights, preserve existing for others
                     color: type === 'html' ? color : existingHighlight.color,
@@ -1723,6 +1726,7 @@ if (__inConsumedAnchor) {
                     footnoteCount: footnoteCount,
                     footnoteContents: footnoteContents,
                     commentTimestamps: commentTimestamps.length > 0 ? commentTimestamps : undefined,
+                    commentTypes: commentTypes.length > 0 ? commentTypes : undefined,
                     createdAt: (function() {
                         try {
                             if (type === 'html') {

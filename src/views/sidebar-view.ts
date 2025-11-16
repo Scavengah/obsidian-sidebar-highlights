@@ -1898,6 +1898,8 @@ const insertPos = editor.offsetToPos(insertOffset);
 
     
 private findAndParseHighlight(content: string, originalHighlight: Highlight, footnoteMap: Map<string, string>): Highlight | null {
+    console.log('=== findAndParseHighlight CALLED ===');
+    console.log('Looking for highlight:', originalHighlight.text.substring(0, 50));
     const isHtml = (!!(originalHighlight as any).color && !originalHighlight.isNativeComment) || (originalHighlight as any).type === 'html';
     const baseRegex = originalHighlight.isNativeComment
         ? new RegExp(`%%${this.escapeRegex(originalHighlight.text)}%%`, 'gi')
@@ -1921,18 +1923,23 @@ private findAndParseHighlight(content: string, originalHighlight: Highlight, foo
                 const ws = slice.match(/^\s+/);
                 if (ws) { pos += ws[0].length; continue; }
                 
-                // Debug: log what we're trying to match
-                console.log('Trying to match at pos', pos, 'slice start:', slice.substring(0, 50));
+                console.log('=== PARSING AT POS', pos, '===');
+                console.log('Slice start (200 chars):', slice.substring(0, 200));
                 
                 const am = slice.match(anchorRe);
+                console.log('Anchor match result:', am ? 'MATCHED' : 'NO MATCH');
                 if (am) {
-                    console.log('Matched anchor:', am[0].substring(0, 80));
+                    console.log('Matched anchor HTML:', am[0].substring(0, 200));
                     const tpl = document.createElement('template');
                     tpl.innerHTML = am[0] || '';
                     const el = tpl.content.querySelector('.comment-text') as HTMLElement | null;
+                    console.log('Element found:', !!el);
+                    console.log('Element outerHTML:', el?.outerHTML?.substring(0, 200));
                     const txt = (el?.textContent || tpl.content.textContent || '').replace(/\s+/g, ' ').trim();
                     let ts: number | undefined = undefined;
                     const dc = el?.getAttribute('date-comment') || '';
+                    console.log('date-comment attribute value:', dc);
+                    console.log('All element attributes:', el ? Array.from(el.attributes).map(a => `${a.name}="${a.value}"`).join(', ') : 'no element');
                     if (dc && /^\d{8}-\d{6}$/.test(dc)) {
                         const y = Number(dc.slice(0,4)), mo = Number(dc.slice(4,6))-1, d = Number(dc.slice(6,8));
                         const hh = Number(dc.slice(9,11)), mm = Number(dc.slice(11,13)), ss = Number(dc.slice(13,15));
@@ -1958,9 +1965,10 @@ private findAndParseHighlight(content: string, originalHighlight: Highlight, foo
                 
                 const sm = slice.match(standardRe);
                 if (sm) {
-                    console.log('Matched standard:', sm[0], 'key:', sm[1]);
+                    console.log('Matched standard footnote:', sm[0], 'key:', sm[1]);
                     const key = sm[1];
                     const body = (footnoteMap.get(key) || '').trim();
+                    console.log('Standard footnote body:', body.substring(0, 100));
                     if (body) tokens.push({ type: 'standard', index: match.index + match[0].length + pos, content: body });
                     pos += sm[0].length;
                     continue;
@@ -1978,9 +1986,11 @@ private findAndParseHighlight(content: string, originalHighlight: Highlight, foo
             const seenContent = new Set<string>();
             const normalizeContent = (s: string) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
             const dedup2 = dedup.filter(t => { const k = normalizeContent(t.content); if (seenContent.has(k)) return false; seenContent.add(k); return true; });
+            console.log('Tokens after dedup:', dedup2.map(t => ({ content: t.content.substring(0, 30), type: t.type, ts: t.ts })));
             const footnoteContents = dedup2.map(t => t.content);
             const commentTimestamps = dedup2.map(t => t.ts);
             const commentTypes = dedup2.map(t => t.type);
+            console.log('Comment types array:', commentTypes);
             const footnoteCount = footnoteContents.length;
             
             const _openTag = (match[0].match(/<mark\b[^>]*>/i)?.[0] || '');
@@ -1992,7 +2002,15 @@ private findAndParseHighlight(content: string, originalHighlight: Highlight, foo
                 const hh = Number(_dh.slice(9,11)), mm = Number(_dh.slice(11,13)), ss = Number(_dh.slice(13,15));
                 _createdAt = new Date(y, mo, d, hh, mm, ss).getTime();
             } else if (_dhts) { const n = Number(_dhts); if (!Number.isNaN(n)) _createdAt = n; }
-            return { ...originalHighlight, footnoteContents, commentTimestamps, commentTypes, footnoteCount, startOffset: match.index, endOffset: match.index + match[0].length };
+            const prevCreated = (originalHighlight as any).createdAt;
+            const createdAtFinal = (typeof _createdAt === 'number' && !Number.isNaN(_createdAt)) ? _createdAt : prevCreated;
+            
+            console.log('=== RETURNING PARSED HIGHLIGHT ===');
+            console.log('Comment types:', commentTypes);
+            console.log('Comment timestamps:', commentTimestamps);
+            console.log('Footnote contents:', footnoteContents);
+            
+            return { ...originalHighlight, createdAt: createdAtFinal, footnoteContents, commentTimestamps, commentTypes, footnoteCount, startOffset: match.index, endOffset: match.index + match[0].length };
         }
     }
     return null;

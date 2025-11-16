@@ -359,32 +359,37 @@ export class HighlightRenderer {
         const validFootnoteContents = highlight.footnoteContents?.filter(c => (c || '').trim() !== '') || [];
 
         if (validFootnoteContents.length > 0) {
-            const pairs = validFootnoteContents.map((content, index) => ({
-                content,
-                ts: ((highlight as any).commentTimestamps && (highlight as any).commentTimestamps[index] != null)
+            const pairs = validFootnoteContents.map((content, index) => {
+                const tsRaw = ((highlight as any).commentTimestamps && (highlight as any).commentTimestamps[index] != null)
                     ? (highlight as any).commentTimestamps[index]
-                    : undefined,
-                type: ((highlight as any).commentTypes && (highlight as any).commentTypes[index])
+                    : undefined;
+                const typeRaw = ((highlight as any).commentTypes && (highlight as any).commentTypes[index])
                     ? (highlight as any).commentTypes[index]
-                    : 'inline', // Default to inline if not specified
-            }));
-            // Final-stage de-duplication by normalized content (keep earliest timestamp)
-            const normalize = (s: string) => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
-            const uniqMap = new Map<string, { content: string, ts: number | undefined, type: string }>();
-            for (const p of pairs) {
-                const k = normalize(p.content);
-                const prev = uniqMap.get(k);
-                if (!prev || ((p.ts ?? Infinity) < (prev.ts ?? Infinity))) {
-                    uniqMap.set(k, { content: p.content, ts: p.ts, type: p.type });
+                    : undefined;
+                
+                // If we have a timestamp but no type, it must be an anchor (span comment)
+                // because only anchors have per-comment timestamps
+                let finalType = typeRaw;
+                if (!finalType && typeof tsRaw === 'number' && !Number.isNaN(tsRaw)) {
+                    finalType = 'anchor';
                 }
-            }
-            const uniq = Array.from(uniqMap.values());
-            uniq.sort((a, b) => {
+                if (!finalType) {
+                    finalType = 'inline';
+                }
+                
+                console.log('Comment mapping - content:', content.substring(0, 30), 'ts:', tsRaw, 'typeRaw:', typeRaw, 'finalType:', finalType);
+                
+                return { content, ts: tsRaw, type: finalType };
+            });
+            
+            // Sort by timestamp
+            pairs.sort((a, b) => {
                 const tsA = a.ts ?? Infinity;
                 const tsB = b.ts ?? Infinity;
                 return tsA - tsB;
             });
-            uniq.forEach(({ content, ts, type }, index) => {
+            
+            pairs.forEach(({ content, ts, type }, index) => {
                 
                 const commentDiv = commentsContainer.createDiv({ cls: 'highlight-comment' });
                 const body = commentDiv.createDiv({ cls: 'highlight-comment-body' });
@@ -393,20 +398,17 @@ export class HighlightRenderer {
                     // Add icon based on comment type
                     const iconSpan = line.createSpan({ cls: 'highlight-comment-type-icon' });
                     
-                    // Debug: log the type to console
-                    console.log('Comment type:', type, 'Content:', content.substring(0, 50));
+                    console.log('Comment type:', type, 'ts:', ts, 'Content:', content.substring(0, 50));
                     
-                    if (type === 'anchor') {
-                        setIcon(iconSpan, 'message-square'); // Span comment icon
-                    } else {
-                        setIcon(iconSpan, 'file-text'); // Footnote icon (inline or standard)
+                    const isSpanComment = type === 'anchor';
+                    setIcon(iconSpan, isSpanComment ? 'message-square' : 'file-text');
+                    const millis = isSpanComment ? ts : (highlight as any).createdAt;
+                    if (typeof millis === 'number' && !Number.isNaN(millis)) {
+                        const tsText = options.dateFormat
+                            ? moment(millis).format(options.dateFormat)
+                            : moment(millis).format('YYYY-MM-DD HH:mm:ss');
+                        line.createSpan({ cls: 'highlight-comment-datetime', text: ' ' + tsText + ': ' });
                     }
-                    
-                    const millis = ts;
-                    const tsText = options.dateFormat
-                        ? moment(millis).format(options.dateFormat)
-                        : moment(millis).format('YYYY-MM-DD HH:mm:ss');
-                    line.createSpan({ cls: 'highlight-comment-datetime', text: tsText + ':' });
                 }
                 const commentTextEl = line.createDiv({ cls: 'highlight-comment-text' });
                 this.renderMarkdownToElement(commentTextEl, content);
