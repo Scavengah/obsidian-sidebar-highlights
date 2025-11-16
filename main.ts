@@ -1499,8 +1499,8 @@ this.addCommand({
                 // For regular and HTML highlights, extract footnotes in the order they appear in the text
                 const afterHighlight = content.substring(match.index + match[0].length);
                 
-                // Find all footnotes (both standard and inline) in order, with optional timestamps
-                const allFootnotes: Array<{type: 'standard' | 'inline', index: number, content: string, timestamp: number | null}> = [];
+                // Find all footnotes (standard, inline, and comment-anchors) in order, with optional timestamps
+                const allFootnotes: Array<{type: 'standard' | 'inline' | 'anchor', index: number, content: string, timestamp: number | null}> = [];
                 
                 // First, get all inline footnotes with their positions
                 const inlineFootnotes = this.inlineFootnoteManager.extractInlineFootnotes(content, match.index + match[0].length);
@@ -1524,7 +1524,7 @@ this.addCommand({
                 while ((match_sf = standardFootnoteRegex.exec(afterHighlight)) !== null) {
                     // Check if this standard footnote is in a valid position
                     const precedingText = afterHighlight.substring(lastValidPosition, match_sf.index);
-                    const isValid = /^(\s*(\[\^[a-zA-Z0-9_-]+\]|\^\[[^\]]+\])\s*)*\s*$/.test(precedingText);
+                    const isValid = /^(\s*(\[\^[a-zA-Z0-9_-]+\]|\^\[[^\]]+\]|\s*<span\s+class=["']comment-anchor["'])\s*)*\s*$/.test(precedingText);
                     
                     if (match_sf.index === lastValidPosition || isValid) {
                         const key = match_sf[2]; // The key inside [^key]
@@ -1546,6 +1546,42 @@ this.addCommand({
                     }
                 }
                 
+                // Finally, get all comment-anchor spans with their positions and timestamps
+                const anchorRegex = /(\s{0,1})<span\s+class=["']comment-anchor["'][^>]*>\s*<span\s+class=["']comment-text["'][^>]*>([\s\S]*?)<\/span>\s*<\/span>/gi;
+                let match_anchor;
+                
+                while ((match_anchor = anchorRegex.exec(afterHighlight)) !== null) {
+                    const tpl = document.createElement('template');
+                    tpl.innerHTML = match_anchor[2] || '';
+                    const anchorText = (tpl.content.textContent || '').replace(/\s+/g, ' ').trim();
+                    
+                    if (anchorText) {
+                        // Extract timestamp from date-comment attribute if present
+                        const dateCommentMatch = match_anchor[0].match(/date-comment=["'](\d{8}-\d{6})["']/);
+                        let timestamp: number | null = null;
+                        if (dateCommentMatch) {
+                            // Parse the date-comment format: YYYYMMDD-HHMMSS
+                            const dateStr = dateCommentMatch[1];
+                            const year = parseInt(dateStr.substring(0, 4), 10);
+                            const month = parseInt(dateStr.substring(4, 6), 10) - 1; // JS months are 0-indexed
+                            const day = parseInt(dateStr.substring(6, 8), 10);
+                            const hour = parseInt(dateStr.substring(9, 11), 10);
+                            const minute = parseInt(dateStr.substring(11, 13), 10);
+                            const second = parseInt(dateStr.substring(13, 15), 10);
+                            timestamp = new Date(year, month, day, hour, minute, second).getTime();
+                        }
+                        
+                        const anchorStart = match.index + match[0].length + match_anchor.index;
+                        allFootnotes.push({
+                            type: 'anchor',
+                            index: anchorStart,
+                            content: anchorText,
+                            timestamp: timestamp
+                        });
+                        consumedAnchorStarts.add(anchorStart);
+                    }
+                }
+                
                 // Sort footnotes by their position in the text
                 allFootnotes.sort((a, b) => a.index - b.index);
                 
@@ -1562,43 +1598,6 @@ this.addCommand({
             }
             
             
-            // Attach adjacent <span class="comment-anchor"><span class="comment-text">…</span></span> (0–1 space tolerance)
-            if (type === 'highlight' || type === 'html') {
-                const endOfThisHighlight = match.index + match[0].length;
-                const after = content.slice(endOfThisHighlight);
-                const mAnchor = after.match(/^(?:\s{0,1})<span\s+class=["']comment-anchor["'][^>]*>\s*<span\s+class=["']comment-text["'][^>]*>([\s\S]*?)<\/span>\s*<\/span>/i);
-                if (mAnchor) {
-                    const leadingSpace = after.startsWith(' ') ? 1 : 0;
-                    const anchorStart = endOfThisHighlight + leadingSpace;
-                    const tpl = document.createElement('template');
-                    tpl.innerHTML = mAnchor[1] || '';
-                    const anchorText = (tpl.content.textContent || '').replace(/\s+/g, ' ').trim();
-                    if (anchorText) {
-                        footnoteContents = Array.isArray(footnoteContents) ? footnoteContents : [];
-                        footnoteContents.push(anchorText);
-                        
-                        // Extract timestamp from date-comment attribute if present
-                        const dateCommentMatch = mAnchor[0].match(/date-comment=["'](\d{8}-\d{6})["']/);
-                        let timestamp: number | null = null;
-                        if (dateCommentMatch) {
-                            // Parse the date-comment format: YYYYMMDD-HHMMSS
-                            const dateStr = dateCommentMatch[1];
-                            const year = parseInt(dateStr.substring(0, 4), 10);
-                            const month = parseInt(dateStr.substring(4, 6), 10) - 1; // JS months are 0-indexed
-                            const day = parseInt(dateStr.substring(6, 8), 10);
-                            const hour = parseInt(dateStr.substring(9, 11), 10);
-                            const minute = parseInt(dateStr.substring(11, 13), 10);
-                            const second = parseInt(dateStr.substring(13, 15), 10);
-                            timestamp = new Date(year, month, day, hour, minute, second).getTime();
-                        }
-                        
-                        commentTimestamps = Array.isArray(commentTimestamps) ? commentTimestamps : [];
-                        commentTimestamps.push(timestamp);
-                        footnoteCount = (footnoteCount || 0) + 1;
-                        consumedAnchorStarts.add(anchorStart);
-                    }
-                }
-            }
 if (existingHighlight) {
                 newHighlights.push({
                     ...existingHighlight,
@@ -1693,8 +1692,8 @@ if (existingHighlight) {
         }
 
         // Check for actual changes before updating and refreshing
-        const oldHighlightsJSON = JSON.stringify(existingHighlightsForFile.map(h => ({id: h.id, start: h.startOffset, end: h.endOffset, text: h.text, footnotes: h.footnoteCount, contents: h.footnoteContents?.filter(c => c.trim() !== ''), color: h.color, isNativeComment: h.isNativeComment})));
-        const newHighlightsJSON = JSON.stringify(newHighlights.map(h => ({id: h.id, start: h.startOffset, end: h.endOffset, text: h.text, footnotes: h.footnoteCount, contents: h.footnoteContents?.filter(c => c.trim() !== ''), color: h.color, isNativeComment: h.isNativeComment})));
+        const oldHighlightsJSON = JSON.stringify(existingHighlightsForFile.map(h => ({id: h.id, start: h.startOffset, end: h.endOffset, text: h.text, footnotes: h.footnoteCount, contents: h.footnoteContents?.filter(c => c.trim() !== ''), timestamps: h.commentTimestamps, color: h.color, isNativeComment: h.isNativeComment})));
+        const newHighlightsJSON = JSON.stringify(newHighlights.map(h => ({id: h.id, start: h.startOffset, end: h.endOffset, text: h.text, footnotes: h.footnoteCount, contents: h.footnoteContents?.filter(c => c.trim() !== ''), timestamps: h.commentTimestamps, color: h.color, isNativeComment: h.isNativeComment})));
 
         if (oldHighlightsJSON !== newHighlightsJSON) {
             this.highlights.set(file.path, newHighlights);
@@ -1740,6 +1739,7 @@ if (existingHighlight) {
                         text: oldHighlight.text, 
                         footnotes: oldHighlight.footnoteCount, 
                         contents: oldHighlight.footnoteContents?.filter(c => c.trim() !== ''), 
+                        timestamps: oldHighlight.commentTimestamps,
                         color: oldHighlight.color,
                         isNativeComment: oldHighlight.isNativeComment
                     });
@@ -1747,6 +1747,7 @@ if (existingHighlight) {
                         text: newHighlight.text, 
                         footnotes: newHighlight.footnoteCount, 
                         contents: newHighlight.footnoteContents?.filter(c => c.trim() !== ''), 
+                        timestamps: newHighlight.commentTimestamps,
                         color: newHighlight.color,
                         isNativeComment: newHighlight.isNativeComment
                     });
