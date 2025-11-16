@@ -16,6 +16,7 @@ const VIEW_TYPE_HIGHLIGHTS = 'highlights-sidebar';
 export class HighlightsSidebarView extends ItemView {
     private restorer: ScrollRestorer = new ScrollRestorer();
     private scheduler: RenderScheduler = new RenderScheduler();
+    private uiVarObserver?: MutationObserver;
 
     plugin: HighlightCommentsPlugin;
     private searchInputEl!: HTMLInputElement;
@@ -1588,7 +1589,7 @@ export class HighlightsSidebarView extends ItemView {
                 // after render, scroll to the matching color group header
                 requestAnimationFrame(() => {
                     try {
-                        const headers = this.listContainerEl?.querySelectorAll('.highlight-group-header') || [] as any;
+                        const headers = Array.from(this.listContainerEl?.querySelectorAll('.highlight-group-header') || []);
                         for (const h of headers) {
                             const labelEl = (h.querySelector('.collection-stats') ? h.firstChild : h) as HTMLElement;
                             const name = (h?.textContent || '').trim();
@@ -1607,8 +1608,8 @@ onFileNameClick: (filePath, event) => {
         return this.highlightRenderer.createHighlightItem(container, highlight, options);
     
         // Ensure the card carries its UI color variables
-        const last = container.lastElementChild as HTMLElement | null;
-        if (last) this.applyUiColorToElement(last, highlight);
+        const last = container.lastElementChild;
+        if (last) this.applyUiColorToElement(last as HTMLElement, highlight);
 }
 
     private rerenderCurrentView(): void {
@@ -2010,7 +2011,7 @@ private findAndParseHighlight(content: string, originalHighlight: Highlight, foo
             console.log('Comment timestamps:', commentTimestamps);
             console.log('Footnote contents:', footnoteContents);
             
-            return { ...originalHighlight, createdAt: createdAtFinal, footnoteContents, commentTimestamps, commentTypes, footnoteCount, startOffset: match.index, endOffset: match.index + match[0].length };
+            return { ...originalHighlight, createdAt: createdAtFinal, footnoteContents, commentTimestamps: commentTimestamps.filter((t): t is number => t !== undefined), commentTypes, footnoteCount, startOffset: match.index, endOffset: match.index + match[0].length };
         }
     }
     return null;

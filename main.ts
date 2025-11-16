@@ -1657,7 +1657,7 @@ this.addCommand({
                 const seenContent = new Set<string>();
                 const dedup2 = dedup.filter(f => { const k = (f.content || '').trim(); if (seenContent.has(k)) return false; seenContent.add(k); return true; });
                 footnoteContents = dedup2.map(f => f.content);
-                commentTimestamps = dedup2.map(f => f.timestamp).filter((ts): ts is number => ts !== undefined);
+                commentTimestamps = dedup2.map(f => f.timestamp);
                 commentTypes = dedup2.map(f => f.type);
                 footnoteCount = footnoteContents.length;
                 
@@ -2500,27 +2500,41 @@ class HighlightSettingTab extends PluginSettingTab {
                 row.setName(`Highlight ${idx + 1}`)
                    .setDesc('Sidebar/UI vs Document color');
                 row.addColorPicker(p => p.setValue(c.ui || '#cccccc').onChange(async (v) => {
-                        this.plugin.settings.extraColors[idx].ui = v;
-                        if (this.plugin.settings.extraColors[idx].linked) {
-                            this.plugin.settings.extraColors[idx].doc = v;
+                        const color = this.plugin.settings.extraColors?.[idx];
+                        if (color) {
+                            color.ui = v;
+                            if (color.linked) {
+                                color.doc = v;
+                            }
                         }
                         await this.plugin.saveSettings(); this.plugin.refreshSidebar();
                     }))
                    .addColorPicker(p => p.setValue(c.doc || c.ui || '#cccccc').onChange(async (v) => {
-                        this.plugin.settings.extraColors[idx].doc = v;
-                        this.plugin.settings.extraColors[idx].linked = false;
+                        const color = this.plugin.settings.extraColors?.[idx];
+                        if (color) {
+                            color.doc = v;
+                            color.linked = false;
+                        }
                         await this.plugin.saveSettings(); this.plugin.updateStyles();
                     }))
                    .addToggle(t => t.setValue(!!c.linked).setTooltip('Link doc to UI').onChange(async (val) => {
-                        this.plugin.settings.extraColors[idx].linked = val;
-                        if (val) this.plugin.settings.extraColors[idx].doc = this.plugin.settings.extraColors[idx].ui;
+                        const color = this.plugin.settings.extraColors?.[idx];
+                        if (color) {
+                            color.linked = val;
+                            if (val) color.doc = color.ui;
+                        }
                         await this.plugin.saveSettings(); this.plugin.updateStyles();
                     }))
                    .addText(t => t.setPlaceholder('Name (optional)').setValue(c.name || '').onChange(async (v) => {
-                        this.plugin.settings.extraColors[idx].name = v; await this.plugin.saveSettings(); this.plugin.refreshSidebar();
+                        const color = this.plugin.settings.extraColors?.[idx];
+                        if (color) color.name = v;
+                        await this.plugin.saveSettings();
+                        this.plugin.refreshSidebar();
                     }))
                    .addExtraButton(btn => btn.setIcon('trash-2').setTooltip('Remove').onClick(async () => {
-                        this.plugin.settings.extraColors.splice(idx, 1); await this.plugin.saveSettings(); renderExtrasDP();
+                        this.plugin.settings.extraColors?.splice(idx, 1);
+                        await this.plugin.saveSettings();
+                        renderExtrasDP();
         // Remove legacy default color controls so only Additional colors remains
         const pruneDefaultColorControls = () => {
             const items = Array.from(containerEl.querySelectorAll('.setting-item'));

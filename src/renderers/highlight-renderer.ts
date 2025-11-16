@@ -402,7 +402,9 @@ export class HighlightRenderer {
                     
                     const isSpanComment = type === 'anchor';
                     setIcon(iconSpan, isSpanComment ? 'message-square' : 'file-text');
-                    const millis = isSpanComment ? ts : (highlight as any).createdAt;
+                    // Only show timestamp for anchor comments (which have individual timestamps)
+                    // Standard inline footnotes don't have timestamps
+                    const millis = isSpanComment ? ts : undefined;
                     if (typeof millis === 'number' && !Number.isNaN(millis)) {
                         const tsText = options.dateFormat
                             ? moment(millis).format(options.dateFormat)
