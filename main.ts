@@ -1648,6 +1648,7 @@ this.addCommand({
                 }
                 
                 // Extract content and timestamps in encountered order
+                // First sort by index to maintain document order
                 allFootnotes.sort((a, b) => a.index - b.index);
                 const dedup: typeof allFootnotes = [];
                 const seen = new Set<number>();
@@ -1656,6 +1657,25 @@ this.addCommand({
                 }
                 const seenContent = new Set<string>();
                 const dedup2 = dedup.filter(f => { const k = (f.content || '').trim(); if (seenContent.has(k)) return false; seenContent.add(k); return true; });
+                
+                // Sort: standard/inline footnotes first (no timestamp), then anchor comments by timestamp (oldest to newest)
+                dedup2.sort((a, b) => {
+                    const aIsFootnote = a.type === 'standard' || a.type === 'inline';
+                    const bIsFootnote = b.type === 'standard' || b.type === 'inline';
+                    
+                    // If both are footnotes or both are anchors, maintain original order
+                    if (aIsFootnote && bIsFootnote) return 0;
+                    if (!aIsFootnote && !bIsFootnote) {
+                        // Both are anchors - sort by timestamp
+                        const aTs = a.timestamp ?? Infinity;
+                        const bTs = b.timestamp ?? Infinity;
+                        return aTs - bTs;
+                    }
+                    
+                    // Footnotes come before anchors
+                    return aIsFootnote ? -1 : 1;
+                });
+                
                 footnoteContents = dedup2.map(f => f.content);
                 commentTimestamps = dedup2.map(f => f.timestamp);
                 commentTypes = dedup2.map(f => f.type);

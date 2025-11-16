@@ -382,11 +382,23 @@ export class HighlightRenderer {
                 return { content, ts: tsRaw, type: finalType };
             });
             
-            // Sort by timestamp
+            // Sort: footnotes first (standard/inline), then anchor comments by timestamp (oldest to newest)
             pairs.sort((a, b) => {
-                const tsA = a.ts ?? Infinity;
-                const tsB = b.ts ?? Infinity;
-                return tsA - tsB;
+                const aIsFootnote = a.type === 'standard' || a.type === 'inline';
+                const bIsFootnote = b.type === 'standard' || b.type === 'inline';
+                
+                // If both are footnotes, maintain order
+                if (aIsFootnote && bIsFootnote) return 0;
+                
+                // If both are anchors, sort by timestamp
+                if (!aIsFootnote && !bIsFootnote) {
+                    const tsA = a.ts ?? Infinity;
+                    const tsB = b.ts ?? Infinity;
+                    return tsA - tsB;
+                }
+                
+                // Footnotes come before anchors
+                return aIsFootnote ? -1 : 1;
             });
             
             pairs.forEach(({ content, ts, type }, index) => {
