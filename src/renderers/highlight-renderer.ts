@@ -261,6 +261,16 @@ export class HighlightRenderer {
             options.onCollectionsMenu?.(event, highlight);
         });
 
+        // Add comment button
+        if (!highlight.isNativeComment) {
+            const addCommentBtn = statsSection.createDiv({ cls: 'highlight-add-comment-icon-btn' });
+            setIcon(addCommentBtn, 'message-square-plus');
+            addCommentBtn.addEventListener('click', (event) => {
+                event.stopPropagation();
+                (options.onAddMarkComment ?? options.onAddComment)?.(highlight);
+            });
+        }
+
         // Create completely separate timestamp section
         this.addTimestampToInfoLine(infoLineContainer, highlight, options);
     }
@@ -421,7 +431,7 @@ export class HighlightRenderer {
                         const tsText = options.dateFormat
                             ? moment(millis).format(options.dateFormat)
                             : moment(millis).format('YYYY-MM-DD HH:mm:ss');
-                        line.createSpan({ cls: 'highlight-comment-datetime', text: ' ' + tsText + ': ' });
+                        line.createSpan({ cls: 'highlight-comment-datetime', text: tsText + ':' });
                     }
                 }
                 const commentTextEl = line.createDiv({ cls: 'highlight-comment-text' });
@@ -441,15 +451,7 @@ export class HighlightRenderer {
 
     
 private createAddCommentLine(commentsContainer: HTMLElement, highlight: Highlight, options: HighlightRenderOptions): void {
-    const row = commentsContainer.createDiv({ cls: 'highlight-add-row' });
-    // Add span comment - just icon
-    const addSpan = row.createDiv({ cls: 'highlight-add-comment-line highlight-add-comment-icon-only' });
-    const spanIcon = addSpan.createDiv({ cls: 'highlight-add-comment-icon' });
-    setIcon(spanIcon, 'message-square-plus');
-    addSpan.addEventListener('click', (event) => {
-        event.stopPropagation();
-        (options.onAddMarkComment ?? options.onAddComment)?.(highlight);
-    });
+    // Remove the add comment line since it's now in the info bar
 }
 
 
