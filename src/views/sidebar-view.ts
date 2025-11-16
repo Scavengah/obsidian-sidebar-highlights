@@ -3700,4 +3700,21 @@ private renderGroupedHighlights(highlights: Highlight[], searchTerm?: string, sh
         }
         return false;
     }
+
+    switchToAllNotesView() {
+        this.viewMode = 'all';
+        this.updateTabStates();
+    }
+
+    scrollToHighlight(highlightId: string) {
+        const highlightEl = this.listContainerEl?.querySelector(`[data-highlight-id="${highlightId}"]`);
+        if (highlightEl) {
+            highlightEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // Flash the highlight to draw attention
+            highlightEl.classList.add('focused');
+            setTimeout(() => {
+                highlightEl.classList.remove('focused');
+            }, 2000);
+        }
+    }
 }

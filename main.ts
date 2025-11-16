@@ -329,6 +329,29 @@ this.addCommand({
             }
         });
 
+        this.addCommand({
+            id: 'go-to-highlight-in-sidebar',
+            name: 'Go to highlight in sidebar',
+            editorCallback: (editor: Editor, view: MarkdownView) => {
+                if (view.file) {
+                    const cursor = editor.getCursor();
+                    const offset = editor.posToOffset(cursor);
+                    const fileHighlights = this.highlights.get(view.file.path) || [];
+                    
+                    // Find highlight at cursor position
+                    const highlightAtCursor = fileHighlights.find(h => 
+                        offset >= h.startOffset && offset <= h.endOffset
+                    );
+                    
+                    if (highlightAtCursor) {
+                        this.revealHighlightInSidebar(highlightAtCursor.id);
+                    } else {
+                        new Notice('No highlight found at cursor position');
+                    }
+                }
+            }
+        });
+
         this.registerEvent(
             this.app.workspace.on('editor-menu', (menu, editor, view) => {
                 if (editor.getSelection()) {
@@ -665,6 +688,26 @@ this.addCommand({
     refreshSidebar() {
         if (this.sidebarView) {
             this.sidebarView.refresh();
+        }
+    }
+
+    revealHighlightInSidebar(highlightId: string) {
+        // Set the selected highlight
+        this.selectedHighlightId = highlightId;
+        
+        // Ensure sidebar is visible
+        this.app.workspace.revealLeaf(
+            this.app.workspace.getLeavesOfType(VIEW_TYPE_HIGHLIGHTS)[0]
+        );
+        
+        // Stay in current view (don't switch to "All Notes")
+        if (this.sidebarView) {
+            this.sidebarView.refresh();
+            
+            // Scroll to the highlight after a short delay to ensure it's rendered
+            setTimeout(() => {
+                this.sidebarView?.scrollToHighlight(highlightId);
+            }, 100);
         }
     }
 
