@@ -1524,7 +1524,7 @@ this.addCommand({
                 while ((match_sf = standardFootnoteRegex.exec(afterHighlight)) !== null) {
                     // Check if this standard footnote is in a valid position
                     const precedingText = afterHighlight.substring(lastValidPosition, match_sf.index);
-                    const isValid = /^(\s*(\[\^[a-zA-Z0-9_-]+\]|\^\[[^\]]+\]|\s*<span\s+class=["']comment-anchor["'])\s*)*\s*$/.test(precedingText);
+                    const isValid = /^(\s*(\[\^[a-zA-Z0-9_-]+\]|\^\[[^\]]+\])\s*)*\s*$/.test(precedingText);
                     
                     if (match_sf.index === lastValidPosition || isValid) {
                         const key = match_sf[2]; // The key inside [^key]
