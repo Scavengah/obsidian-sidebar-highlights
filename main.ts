@@ -48,6 +48,7 @@ export interface Highlight {
     filePath: string;
     footnoteCount?: number;
     footnoteContents?: string[];
+    footnoteTimestamps?: (number | undefined)[]; // Parallel array to footnoteContents for date-comment timestamps
     color?: string;
     collectionIds?: string[]; // Add collection support
     createdAt?: number; // Timestamp when highlight was created
@@ -1232,6 +1233,24 @@ this.addCommand({
         tpl.innerHTML = html || '';
         return (tpl.content.textContent || '').replace(/\s+/g, ' ').trim();
     }
+    
+    // Parse date-comment attribute value (format: YYYYMMDD-HHMMSS) into timestamp
+    private parseDateComment(dateCommentStr: string): number | undefined {
+        if (!dateCommentStr || dateCommentStr.length < 15) return undefined;
+        try {
+            const year = dateCommentStr.substring(0, 4);
+            const month = dateCommentStr.substring(4, 6);
+            const day = dateCommentStr.substring(6, 8);
+            const hour = dateCommentStr.substring(9, 11);
+            const minute = dateCommentStr.substring(11, 13);
+            const second = dateCommentStr.substring(13, 15);
+            const dateStr = `${year}-${month}-${day}T${hour}:${minute}:${second}`;
+            const timestamp = new Date(dateStr).getTime();
+            return isNaN(timestamp) ? undefined : timestamp;
+        } catch {
+            return undefined;
+        }
+    }
     // --- Nested <mark> parser (non-invasive) ---
     private parseNestedMarks(content: string): Array<{
         start: number; end: number; text: string; color?: string; children: Array<{start:number; end:number; text:string; color?: string}>
@@ -1556,23 +1575,54 @@ this.addCommand({
             }
             
             
-            // Attach adjacent <span class="comment-anchor"><span class="comment-text">…</span></span> (0–1 space tolerance)
+            // Track timestamps for footnotes/comments (parallel to footnoteContents)
+            let footnoteTimestamps: (number | undefined)[] = [];
+            
+            // Initialize timestamps array for existing footnotes (standard/inline) - they don't have date-comment
+            if (footnoteContents.length > 0) {
+                footnoteTimestamps = new Array(footnoteContents.length).fill(undefined);
+            }
+            
+            // Attach adjacent <span class="comment-anchor"><span class="comment-text">…</span></span> spans
+            // Modified to find ALL consecutive comment-anchor spans, not just the first one
             if (type === 'highlight' || type === 'html') {
                 const endOfThisHighlight = match.index + match[0].length;
-                const after = content.slice(endOfThisHighlight);
-                const mAnchor = after.match(/^(?:\s{0,1})<span\s+class=["']comment-anchor["'][^>]*>\s*<span\s+class=["']comment-text["'][^>]*>([\s\S]*?)<\/span>\s*<\/span>/i);
-                if (mAnchor) {
-                    const leadingSpace = after.startsWith(' ') ? 1 : 0;
-                    const anchorStart = endOfThisHighlight + leadingSpace;
-                    const tpl = document.createElement('template');
-                    tpl.innerHTML = mAnchor[1] || '';
-                    const anchorText = (tpl.content.textContent || '').replace(/\s+/g, ' ').trim();
+                let searchFrom = endOfThisHighlight;
+                const anchorRegex = /^(\s{0,1})<span\s+class=["']comment-anchor["'][^>]*>\s*<span\s+class=["']comment-text["']([^>]*?)>([\s\S]*?)<\/span>\s*<\/span>/i;
+                
+                // Loop to find all consecutive comment-anchor spans
+                while (true) {
+                    const after = content.slice(searchFrom);
+                    const mAnchor = after.match(anchorRegex);
+                    if (!mAnchor) break; // No more comment-anchors found
+                    
+                    const leadingSpace = mAnchor[1].length; // 0 or 1
+                    const anchorStart = searchFrom + leadingSpace;
+                    const attributes = mAnchor[2]; // Attributes string from comment-text span
+                    const innerHtml = mAnchor[3]; // Content inside comment-text span
+                    
+                    // Extract text content
+                    const anchorText = this.stripHtmlToText(innerHtml);
                     if (anchorText) {
                         footnoteContents = Array.isArray(footnoteContents) ? footnoteContents : [];
                         footnoteContents.push(anchorText);
                         footnoteCount = (footnoteCount || 0) + 1;
                         consumedAnchorStarts.add(anchorStart);
+                        
+                        // Extract date-comment attribute if present
+                        const dateCommentMatch = attributes.match(/date-comment=["']([^"']+)["']/);
+                        const timestamp = dateCommentMatch ? this.parseDateComment(dateCommentMatch[1]) : undefined;
+                        footnoteTimestamps.push(timestamp);
                     }
+                    
+                    // Move search position forward to find next comment-anchor
+                    searchFrom = searchFrom + mAnchor[0].length;
+                    
+                    // Safety check: don't search past a reasonable distance (e.g., next newline or 500 chars)
+                    const remaining = content.slice(searchFrom);
+                    const nextNewline = remaining.indexOf('\n');
+                    if (nextNewline !== -1 && nextNewline < 10) break; // Stop if we hit a newline soon
+                    if (searchFrom - endOfThisHighlight > 2000) break; // Safety limit
                 }
             }
 if (existingHighlight) {
@@ -1584,6 +1634,7 @@ if (existingHighlight) {
                     filePath: file.path, // ensure filePath is current
                     footnoteCount: footnoteCount,
                     footnoteContents: footnoteContents,
+                    footnoteTimestamps: footnoteTimestamps,
                     isNativeComment: type === 'comment',
                     // Update color for HTML highlights, preserve existing for others
                     color: type === 'html' ? color : existingHighlight.color,
@@ -1607,6 +1658,7 @@ if (existingHighlight) {
                     filePath: file.path,
                     footnoteCount: footnoteCount,
                     footnoteContents: footnoteContents,
+                    footnoteTimestamps: footnoteTimestamps,
                     createdAt: uniqueTimestamp,
                     isNativeComment: type === 'comment',
                     // Set color for HTML highlights
@@ -1621,15 +1673,21 @@ if (existingHighlight) {
 
         // Standalone comment-anchor cards (anchors not attached above)
         {
-            const anchorCommentRegex = /<span\s+class=["']comment-anchor["'][^>]*>\s*<span\s+class=["']comment-text["'][^>]*>([\s\S]*?)<\/span>\s*<\/span>/gi;
+            const anchorCommentRegex = /<span\s+class=["']comment-anchor["'][^>]*>\s*<span\s+class=["']comment-text["']([^>]*?)>([\s\S]*?)<\/span>\s*<\/span>/gi;
             let am: RegExpExecArray | null;
             while ((am = anchorCommentRegex.exec(content)) !== null) {
                 if (consumedAnchorStarts.has(am.index)) continue;
                 if (this.isInsideCodeBlock(am.index, am.index + am[0].length, codeBlockRanges)) continue;
-                const tpl = document.createElement('template');
-                tpl.innerHTML = am[1] || '';
-                const textOnly = (tpl.content.textContent || '').replace(/\s+/g, ' ').trim();
+                
+                const attributes = am[1]; // Attributes from comment-text span
+                const innerHtml = am[2]; // Content inside comment-text span
+                const textOnly = this.stripHtmlToText(innerHtml);
                 if (!textOnly) continue;
+                
+                // Extract date-comment attribute if present
+                const dateCommentMatch = attributes.match(/date-comment=["']([^"']+)["']/);
+                const timestamp = dateCommentMatch ? this.parseDateComment(dateCommentMatch[1]) : undefined;
+                
                 const lineNumber = content.substring(0, am.index).split('\n').length - 1;
                 newHighlights.push({
                     id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
@@ -1641,9 +1699,10 @@ if (existingHighlight) {
                     filePath: file.path,
                     footnoteCount: 1,
                     footnoteContents: [textOnly],
+                    footnoteTimestamps: [timestamp],
                     isNativeComment: true,
                     color: undefined,
-                    createdAt: Date.now(),
+                    createdAt: timestamp || Date.now(), // Use date-comment timestamp if available
                     type: 'comment' as any
                 });
             }
