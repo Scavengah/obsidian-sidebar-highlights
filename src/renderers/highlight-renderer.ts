@@ -311,9 +311,34 @@ export class HighlightRenderer {
         if (!highlight.isNativeComment) {
             const validFootnoteContents = highlight.footnoteContents?.filter(c => c.trim() !== '') || [];
             if (validFootnoteContents.length > 0) {
+                // Get the original indices before filtering to access correct timestamps
+                const originalIndices: number[] = [];
+                highlight.footnoteContents?.forEach((content, idx) => {
+                    if (content.trim() !== '') {
+                        originalIndices.push(idx);
+                    }
+                });
+                
                 validFootnoteContents.forEach((content, index) => {
                     const commentDiv = commentsContainer.createDiv({ cls: 'highlight-comment' });
-                    this.renderMarkdownToElement(commentDiv, content);
+                    
+                    // Display timestamp if available
+                    const originalIndex = originalIndices[index];
+                    const timestamp = highlight.commentTimestamps && 
+                                     highlight.commentTimestamps[originalIndex] != null
+                        ? highlight.commentTimestamps[originalIndex]
+                        : null;
+                    
+                    if (timestamp && options.showTimestamp) {
+                        const timestampDiv = commentDiv.createDiv({ cls: 'comment-timestamp' });
+                        const date = new Date(timestamp);
+                        const formattedDate = moment(date).format(options.dateFormat || 'YYYY-MM-DD HH:mm:ss');
+                        timestampDiv.textContent = formattedDate + ': ';
+                    }
+                    
+                    const contentSpan = commentDiv.createSpan({ cls: 'comment-content' });
+                    this.renderMarkdownToElement(contentSpan, content);
+                    
                     commentDiv.addEventListener('click', (event) => {
                         event.stopPropagation();
                         options.onCommentClick?.(highlight, index, event);

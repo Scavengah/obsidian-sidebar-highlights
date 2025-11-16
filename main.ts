@@ -48,6 +48,7 @@ export interface Highlight {
     filePath: string;
     footnoteCount?: number;
     footnoteContents?: string[];
+    commentTimestamps?: (number | null)[]; // Timestamps for each comment, null if no timestamp available
     color?: string;
     collectionIds?: string[]; // Add collection support
     createdAt?: number; // Timestamp when highlight was created
@@ -1491,14 +1492,15 @@ this.addCommand({
             const lineNumber = content.substring(0, match.index).split('\n').length - 1;
             
             let footnoteContents: string[] = [];
+            let commentTimestamps: (number | null)[] = [];
             let footnoteCount = 0;
             
             if (type === 'highlight' || type === 'html') {
                 // For regular and HTML highlights, extract footnotes in the order they appear in the text
                 const afterHighlight = content.substring(match.index + match[0].length);
                 
-                // Find all footnotes (both standard and inline) in order
-                const allFootnotes: Array<{type: 'standard' | 'inline', index: number, content: string}> = [];
+                // Find all footnotes (both standard and inline) in order, with optional timestamps
+                const allFootnotes: Array<{type: 'standard' | 'inline', index: number, content: string, timestamp: number | null}> = [];
                 
                 // First, get all inline footnotes with their positions
                 const inlineFootnotes = this.inlineFootnoteManager.extractInlineFootnotes(content, match.index + match[0].length);
@@ -1507,7 +1509,8 @@ this.addCommand({
                         allFootnotes.push({
                             type: 'inline',
                             index: footnote.startIndex,
-                            content: footnote.content.trim()
+                            content: footnote.content.trim(),
+                            timestamp: null // Inline footnotes don't have timestamps
                         });
                     }
                 });
@@ -1531,7 +1534,8 @@ this.addCommand({
                                 allFootnotes.push({
                                     type: 'standard',
                                     index: match.index + match[0].length + match_sf.index,
-                                    content: fnContent
+                                    content: fnContent,
+                                    timestamp: null // Standard footnotes don't have timestamps
                                 });
                             }
                         }
@@ -1545,13 +1549,15 @@ this.addCommand({
                 // Sort footnotes by their position in the text
                 allFootnotes.sort((a, b) => a.index - b.index);
                 
-                // Extract content in the correct order
+                // Extract content and timestamps in the correct order, keeping them aligned
                 footnoteContents = allFootnotes.map(f => f.content);
+                commentTimestamps = allFootnotes.map(f => f.timestamp);
                 footnoteCount = footnoteContents.length;
                 
             } else if (type === 'comment') {
                 // For comments, the text itself IS the comment content
                 footnoteContents = [highlightText];
+                commentTimestamps = [null]; // Native comments don't have timestamps
                 footnoteCount = 1;
             }
             
@@ -1570,6 +1576,24 @@ this.addCommand({
                     if (anchorText) {
                         footnoteContents = Array.isArray(footnoteContents) ? footnoteContents : [];
                         footnoteContents.push(anchorText);
+                        
+                        // Extract timestamp from date-comment attribute if present
+                        const dateCommentMatch = mAnchor[0].match(/date-comment=["'](\d{8}-\d{6})["']/);
+                        let timestamp: number | null = null;
+                        if (dateCommentMatch) {
+                            // Parse the date-comment format: YYYYMMDD-HHMMSS
+                            const dateStr = dateCommentMatch[1];
+                            const year = parseInt(dateStr.substring(0, 4), 10);
+                            const month = parseInt(dateStr.substring(4, 6), 10) - 1; // JS months are 0-indexed
+                            const day = parseInt(dateStr.substring(6, 8), 10);
+                            const hour = parseInt(dateStr.substring(9, 11), 10);
+                            const minute = parseInt(dateStr.substring(11, 13), 10);
+                            const second = parseInt(dateStr.substring(13, 15), 10);
+                            timestamp = new Date(year, month, day, hour, minute, second).getTime();
+                        }
+                        
+                        commentTimestamps = Array.isArray(commentTimestamps) ? commentTimestamps : [];
+                        commentTimestamps.push(timestamp);
                         footnoteCount = (footnoteCount || 0) + 1;
                         consumedAnchorStarts.add(anchorStart);
                     }
@@ -1584,6 +1608,7 @@ if (existingHighlight) {
                     filePath: file.path, // ensure filePath is current
                     footnoteCount: footnoteCount,
                     footnoteContents: footnoteContents,
+                    commentTimestamps: commentTimestamps.length > 0 ? commentTimestamps : undefined,
                     isNativeComment: type === 'comment',
                     // Update color for HTML highlights, preserve existing for others
                     color: type === 'html' ? color : existingHighlight.color,
@@ -1607,6 +1632,7 @@ if (existingHighlight) {
                     filePath: file.path,
                     footnoteCount: footnoteCount,
                     footnoteContents: footnoteContents,
+                    commentTimestamps: commentTimestamps.length > 0 ? commentTimestamps : undefined,
                     createdAt: uniqueTimestamp,
                     isNativeComment: type === 'comment',
                     // Set color for HTML highlights
@@ -1631,6 +1657,22 @@ if (existingHighlight) {
                 const textOnly = (tpl.content.textContent || '').replace(/\s+/g, ' ').trim();
                 if (!textOnly) continue;
                 const lineNumber = content.substring(0, am.index).split('\n').length - 1;
+                
+                // Extract timestamp from date-comment attribute if present
+                const dateCommentMatch = am[0].match(/date-comment=["'](\d{8}-\d{6})["']/);
+                let timestamp: number | null = null;
+                if (dateCommentMatch) {
+                    // Parse the date-comment format: YYYYMMDD-HHMMSS
+                    const dateStr = dateCommentMatch[1];
+                    const year = parseInt(dateStr.substring(0, 4), 10);
+                    const month = parseInt(dateStr.substring(4, 6), 10) - 1; // JS months are 0-indexed
+                    const day = parseInt(dateStr.substring(6, 8), 10);
+                    const hour = parseInt(dateStr.substring(9, 11), 10);
+                    const minute = parseInt(dateStr.substring(11, 13), 10);
+                    const second = parseInt(dateStr.substring(13, 15), 10);
+                    timestamp = new Date(year, month, day, hour, minute, second).getTime();
+                }
+                
                 newHighlights.push({
                     id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
                     text: textOnly,
@@ -1641,6 +1683,7 @@ if (existingHighlight) {
                     filePath: file.path,
                     footnoteCount: 1,
                     footnoteContents: [textOnly],
+                    commentTimestamps: [timestamp],
                     isNativeComment: true,
                     color: undefined,
                     createdAt: Date.now(),
