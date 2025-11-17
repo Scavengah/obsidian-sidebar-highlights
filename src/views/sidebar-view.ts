@@ -28,6 +28,7 @@ export class HighlightsSidebarView extends ItemView {
     private commentsToggleButton!: HTMLElement;
     private selectedTags: Set<string> = new Set();
     private selectedCollections: Set<string> = new Set();
+    private selectedHighlightTypes: Set<string> = new Set();
     private viewMode: 'current' | 'all' | 'collections' = 'current';
     private currentCollectionId: string | null = null;
     private preservedScrollTop: number = 0;
@@ -264,11 +265,22 @@ export class HighlightsSidebarView extends ItemView {
             const tagFilterButton = searchContainer.createEl('button', {
                 cls: 'highlights-group-button highlights-tag-filter-button'
             });
-            setTooltip(tagFilterButton, 'Filter');
+            setTooltip(tagFilterButton, 'Filter by tags/collections');
             setIcon(tagFilterButton, 'list-filter');
             
             tagFilterButton.addEventListener('click', (event) => {
                 this.showTagFilterMenu(event);
+            });
+
+            // Add highlight category filter button
+            const categoryFilterButton = searchContainer.createEl('button', {
+                cls: 'highlights-group-button highlights-category-filter-button'
+            });
+            setTooltip(categoryFilterButton, 'Filter by highlight type');
+            setIcon(categoryFilterButton, 'palette');
+            
+            categoryFilterButton.addEventListener('click', (event) => {
+                this.showCategoryFilterMenu(event);
             });
 
             // Add collection navigation button (New Collection / Back to Collections)
@@ -343,6 +355,7 @@ export class HighlightsSidebarView extends ItemView {
                 this.viewMode = 'current';
                 this.selectedTags.clear();
                 this.selectedCollections.clear();
+                this.selectedHighlightTypes.clear();
                 this.updateContent(); // Content update instead of full rebuild
             }
         });
@@ -355,6 +368,7 @@ export class HighlightsSidebarView extends ItemView {
                 this.viewMode = 'all';
                 this.selectedTags.clear();
                 this.selectedCollections.clear();
+                this.selectedHighlightTypes.clear();
                 this.updateContent(); // Content update instead of full rebuild
             }
         });
@@ -368,6 +382,7 @@ export class HighlightsSidebarView extends ItemView {
                 this.currentCollectionId = null;
                 this.selectedTags.clear();
                 this.selectedCollections.clear();
+                this.selectedHighlightTypes.clear();
                 this.updateContent(); // Content update instead of full rebuild
             }
         });
@@ -407,6 +422,7 @@ export class HighlightsSidebarView extends ItemView {
         // Clear maps to free memory
         this.highlightCommentsVisible.clear();
         this.selectedTags.clear();
+        this.selectedHighlightTypes.clear();
     }
 
     // Navigate to a specific collection (called from command palette)
@@ -441,12 +457,14 @@ export class HighlightsSidebarView extends ItemView {
         
         // Clear any tag filters
         this.selectedTags.clear();
-        
+        this.selectedHighlightTypes.clear();
+
         // Render the collection detail view
         this.renderContent();
     }
     refresh() {
         this.selectedTags.clear();
+        this.selectedHighlightTypes.clear();
 
         const savedViewMode = this.viewMode;
         const savedCollectionId = this.currentCollectionId;
@@ -916,6 +934,7 @@ export class HighlightsSidebarView extends ItemView {
             }
         }
         this.showTagActive();
+        this.showCategoryActive();
         
         // Restore scroll position after DOM rebuild
         this.restoreScrollPosition();
@@ -3134,7 +3153,7 @@ private renderGroupedHighlights(highlights: Highlight[], searchTerm?: string, sh
                 className: 'highlights-dropdown-clear',
                 onClick: () => {
                     this.selectedTags.clear();
-                this.selectedCollections.clear();
+                    this.selectedCollections.clear();
                     this.renderContent();
                     this.showTagActive();
                     
@@ -3170,7 +3189,7 @@ private renderGroupedHighlights(highlights: Highlight[], searchTerm?: string, sh
             })));
         }
 
-        // Add separator if both tags and collections exist
+        // Add separator if tags and collections exist
         if (availableTags.length > 0 && sortedCollections.length > 0) {
             items.push({
                 text: '',
@@ -3196,6 +3215,57 @@ private renderGroupedHighlights(highlights: Highlight[], searchTerm?: string, sh
                 }
             })));
         }
+
+        this.dropdownManager.showDropdown(
+            event.currentTarget as HTMLElement,
+            items
+        );
+    }
+
+    private showCategoryFilterMenu(event: MouseEvent) {
+        const availableHighlightTypes = this.getAllHighlightTypes();
+        
+        if (availableHighlightTypes.length === 0) {
+            new Notice('No highlight types found');
+            return;
+        }
+        
+        const items: DropdownItem[] = [
+            {
+                text: 'Clear',
+                icon: 'x',
+                className: 'highlights-dropdown-clear',
+                onClick: () => {
+                    this.selectedHighlightTypes.clear();
+                    this.renderContent();
+                    this.showCategoryActive();
+                    
+                    // Update all checkbox states to unchecked
+                    const newStates: { [key: string]: boolean } = {};
+                    availableHighlightTypes.forEach(type => {
+                        newStates[`type-${type.key}`] = false;
+                    });
+                    this.dropdownManager.updateAllCheckboxStates(newStates);
+                }
+            }
+        ];
+
+        // Add highlight types
+        items.push(...availableHighlightTypes.map(type => ({
+            id: `type-${type.key}`,
+            text: type.label,
+            uncheckedIcon: 'palette',
+            checked: this.selectedHighlightTypes.has(type.key),
+            onClick: () => {
+                if (this.selectedHighlightTypes.has(type.key)) {
+                    this.selectedHighlightTypes.delete(type.key);
+                } else {
+                    this.selectedHighlightTypes.add(type.key);
+                }
+                this.renderContent();
+                this.showCategoryActive();
+            }
+        })));
 
         this.dropdownManager.showDropdown(
             event.currentTarget as HTMLElement,
@@ -3427,6 +3497,17 @@ private renderGroupedHighlights(highlights: Highlight[], searchTerm?: string, sh
         }
     }
 
+    private showCategoryActive() {
+        const categoryFilterButton = this.contentEl.querySelector('.highlights-category-filter-button') as HTMLElement;
+        if (categoryFilterButton) {
+            if (this.selectedHighlightTypes.size > 0) {
+                categoryFilterButton.classList.add('active');
+            } else {
+                categoryFilterButton.classList.remove('active');
+            }
+        }
+    }
+
     private showNewCollectionDialog(highlightId?: string) {
         new NewCollectionModal(this.plugin.app, (name: string, description: string) => {
             const collection = this.plugin.collectionsManager.createCollection(name, description);
@@ -3611,12 +3692,20 @@ private renderGroupedHighlights(highlights: Highlight[], searchTerm?: string, sh
                 if (!collectionFilterMatch) return false;
             }
 
-            // 4. Apply native comments filtering
+            // 4. Apply highlight type filter (color/class)
+            if (this.selectedHighlightTypes.size > 0) {
+                const highlightType = this.getHighlightTypeKey(highlight);
+                if (!highlightType || !this.selectedHighlightTypes.has(highlightType)) {
+                    return false;
+                }
+            }
+
+            // 5. Apply native comments filtering
             if (!this.showNativeComments && highlight.isNativeComment) {
                 return false;
             }
 
-            // 5. Apply minimum character count filtering (for highlights and native comments only)
+            // 6. Apply minimum character count filtering (for highlights and native comments only)
             const minCharCount = this.plugin.settings.minimumCharacterCount;
             if (minCharCount > 0 && (highlight.type === 'highlight' || highlight.type === 'html' || highlight.isNativeComment)) {
                 const textLength = highlight.text.length;
@@ -3627,6 +3716,116 @@ private renderGroupedHighlights(highlights: Highlight[], searchTerm?: string, sh
 
             return true;
         });
+    }
+
+    private getHighlightTypeKey(highlight: Highlight): string | null {
+        // For HTML marks with class slugs
+        if (highlight.markClassSlug) {
+            return `class:${highlight.markClassSlug}`;
+        }
+        // For highlights with colors
+        if (highlight.color) {
+            const color = highlight.color.toLowerCase();
+            // Check if this color has a custom name
+            const customColorEntry = Object.entries(this.plugin.settings.customColorNames || {}).find(
+                ([colorKey, name]) => this.plugin.settings.customColors[colorKey as keyof typeof this.plugin.settings.customColors]?.toLowerCase() === color
+            );
+            if (customColorEntry && customColorEntry[1]) {
+                return `color:${color}`;
+            }
+            // No custom name - group as uncategorized
+            return 'uncategorized';
+        }
+        // For standard highlights without color (use default yellow)
+        if (highlight.type === 'highlight' && !highlight.color) {
+            return 'color:default';
+        }
+        // Native comments
+        if (highlight.isNativeComment) {
+            return 'native-comment';
+        }
+        return null;
+    }
+
+    private getHighlightTypeLabel(typeKey: string): string {
+        if (typeKey === 'native-comment') {
+            return 'Native Comments';
+        }
+        if (typeKey === 'uncategorized') {
+            return 'Uncategorized';
+        }
+        if (typeKey === 'color:default') {
+            return 'Default Highlight';
+        }
+        if (typeKey.startsWith('class:')) {
+            const slug = typeKey.replace('class:', '');
+            // Try to find the name from extraColors
+            const extraColor = this.plugin.settings.extraColors?.find(c => {
+                const colorSlug = (c.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+                return colorSlug === slug;
+            });
+            if (extraColor?.name) {
+                return extraColor.name;
+            }
+            // Capitalize the slug as fallback
+            return slug.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+        }
+        if (typeKey.startsWith('color:')) {
+            const color = typeKey.replace('color:', '');
+            // Try to find a custom name for this color
+            const customColorEntry = Object.entries(this.plugin.settings.customColorNames || {}).find(
+                ([colorKey, name]) => this.plugin.settings.customColors[colorKey as keyof typeof this.plugin.settings.customColors]?.toLowerCase() === color
+            );
+            if (customColorEntry && customColorEntry[1]) {
+                return customColorEntry[1];
+            }
+            // If no custom name, return generic label instead of hex code
+            return 'Unnamed Color';
+        }
+        return typeKey;
+    }
+
+    private getAllHighlightTypes(): Array<{ key: string; label: string; color?: string }> {
+        const types = new Map<string, { label: string; color?: string }>();
+        
+        // Get highlights based on current view mode
+        let highlights: Highlight[] = [];
+        if (this.viewMode === 'current') {
+            const file = this.plugin.app.workspace.getActiveFile();
+            if (file) {
+                highlights = this.plugin.highlights.get(file.path) || [];
+            }
+        } else if (this.viewMode === 'all') {
+            for (const fileHighlights of this.plugin.highlights.values()) {
+                highlights.push(...fileHighlights);
+            }
+        } else if (this.viewMode === 'collections' && this.currentCollectionId) {
+            highlights = this.plugin.collectionsManager.getHighlightsInCollection(this.currentCollectionId);
+        }
+        
+        // Extract unique highlight types
+        for (const highlight of highlights) {
+            const typeKey = this.getHighlightTypeKey(highlight);
+            if (typeKey && !types.has(typeKey)) {
+                const label = this.getHighlightTypeLabel(typeKey);
+                const color = highlight.color || (typeKey.startsWith('color:') ? typeKey.replace('color:', '') : undefined);
+                types.set(typeKey, { label, color });
+            }
+        }
+        
+        // Convert to array and sort
+        return Array.from(types.entries())
+            .map(([key, { label, color }]) => ({ key, label, color }))
+            .sort((a, b) => {
+                // Native comments first
+                if (a.key === 'native-comment') return -1;
+                if (b.key === 'native-comment') return 1;
+                // Uncategorized last
+                if (a.key === 'uncategorized') return 1;
+                if (b.key === 'uncategorized') return -1;
+                // Then sort alphabetically by label
+                return a.label.localeCompare(b.label);
+            });
     }
 
     private passesSmartSearchFilter(highlight: Highlight): boolean {
